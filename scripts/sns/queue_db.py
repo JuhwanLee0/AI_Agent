@@ -108,6 +108,10 @@ class QueueDB:
             rows = conn.execute(query, params).fetchall()
             return [self._row_to_dict(row) for row in rows]
 
+    def get_all_items(self) -> List[Dict[str, Any]]:
+        return self.list_items(limit=500)
+
+
     def update_verification_result(
         self,
         item_id: int,
