@@ -305,54 +305,68 @@ def get_message_permalink(channel: str, message_ts: str) -> str:
     except Exception:
         return ""
 
-def get_project_summary_info(project_dir: Path, user_prompt: str = "") -> dict:
+def extract_clean_project_slug_and_title(user_prompt: str) -> Tuple[str, str]:
+    """
+    사용자 프롬프트에서 외부 URL을 정제하여 순수 프로젝트 슬러그와 슬랙 표시용 깔끔한 제목 생성
+    (예: 'https://www.treeoflifemissions.com 사이트 만들어줘' -> slug: 'tree-of-life-missions', title: '🌐 [신규 웹 제작] Tree of Life Missions')
+    """
+    url_match = re.search(r'https?://(?:www\.)?([^/\s]+)', user_prompt)
+    if url_match:
+        domain = url_match.group(1).split('.')[0]
+        # 도메인 이름 하이픈 분리
+        slug = re.sub(r'[^a-zA-Z0-9]+', '-', domain).strip('-').lower() or "custom-web"
+        clean_name = domain.replace("-", " ").title()
+        title = f"🌐 [웹사이트 리디자인/제작] {clean_name}"
+        return slug, title
+    
+    # 일반 텍스트인 경우
+    clean_text = re.sub(r'https?://[^\s]+', '', user_prompt).strip()
+    safe_slug = re.sub(r'[^a-zA-Z0-9가-힣]+', '-', clean_text[:20]).strip('-').lower() or "ai-project"
+    title = f"🚀 [프로젝트] {clean_text[:30]}" + ("..." if len(clean_text) > 30 else "")
+    return safe_slug, title
+
+def get_project_summary_info(target_proj_dir_rel: str = "", user_prompt: str = "") -> dict:
     """생성된 프로젝트 파일 및 산출물 정밀 스캔 및 라이브 프리뷰 링크 정보 생성"""
     files = []
     has_html = False
     html_rel_path = ""
-    target_project_dir_rel = ""
+    target_project_dir_rel = target_proj_dir_rel or ""
     
-    # 1. projects/ 폴더 스캔 (가장 최근 수정된 프로젝트 또는 user_prompt와 매칭되는 폴더 우선)
-    projects_dir = PROJECT_ROOT / "projects"
-    if projects_dir.exists():
-        subdirs = [d for d in projects_dir.iterdir() if d.is_dir() and d.name not in {".git", "node_modules", "__pycache__"}]
-        # 최근 수정순 정렬
-        subdirs.sort(key=lambda d: d.stat().st_mtime, reverse=True)
-        
-        for subdir in subdirs:
-            index_file = subdir / "index.html"
-            if index_file.exists() and not has_html:
+    # 1. 전달받은 대상 프로젝트 디렉토리 최우선 검사 (projects/<slug>/)
+    if target_project_dir_rel:
+        target_path = PROJECT_ROOT / target_project_dir_rel
+        if target_path.exists():
+            idx_file = target_path / "index.html"
+            if idx_file.exists():
                 has_html = True
-                html_rel_path = os.path.relpath(index_file, PROJECT_ROOT)
-                target_project_dir_rel = os.path.relpath(subdir, PROJECT_ROOT)
-            
-            for root, dirs, fnames in os.walk(subdir):
+                html_rel_path = os.path.relpath(idx_file, PROJECT_ROOT)
+            for root, dirs, fnames in os.walk(target_path):
                 dirs[:] = [d for d in dirs if d not in {".git", "node_modules", "__pycache__"}]
                 for fn in fnames:
                     rel = os.path.relpath(os.path.join(root, fn), PROJECT_ROOT)
                     if rel not in files:
                         files.append(rel)
 
-    # 2. output/ 폴더 스캔
-    if project_dir and project_dir.exists():
-        out_rel = os.path.relpath(project_dir, PROJECT_ROOT)
-        if not target_project_dir_rel:
-            target_project_dir_rel = out_rel
-        for root, dirs, fnames in os.walk(project_dir):
-            for fn in fnames:
-                rel = os.path.relpath(os.path.join(root, fn), PROJECT_ROOT)
-                if rel not in files:
-                    files.append(rel)
-                if fn == "index.html" and not has_html:
+    # 2. projects/ 폴더 전역 스캔 (최신 수정순)
+    if not has_html:
+        projects_dir = PROJECT_ROOT / "projects"
+        if projects_dir.exists():
+            subdirs = [d for d in projects_dir.iterdir() if d.is_dir() and d.name not in {".git", "node_modules", "__pycache__"}]
+            subdirs.sort(key=lambda d: d.stat().st_mtime, reverse=True)
+            for subdir in subdirs:
+                index_file = subdir / "index.html"
+                if index_file.exists() and not has_html:
                     has_html = True
-                    html_rel_path = rel
+                    html_rel_path = os.path.relpath(index_file, PROJECT_ROOT)
+                    if not target_project_dir_rel:
+                        target_project_dir_rel = os.path.relpath(subdir, PROJECT_ROOT)
 
     return {
         "files": files,
         "total_files": len(files),
         "has_html": has_html,
-        "html_rel_path": html_rel_path,
-        "project_dir_rel": target_project_dir_rel or (os.path.relpath(project_dir, PROJECT_ROOT) if project_dir else "output")
+        "html_rel_path": html_rel_path or (f"{target_project_dir_rel}/index.html" if target_project_dir_rel else "ai_company/web/index.html"),
+        "project_dir_rel": target_project_dir_rel or "projects/default"
     }
 
 def get_target_channel(agent_name: str, fallback_channel: str) -> str:
@@ -428,29 +442,33 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
             return
 
     import datetime
-    # 프로젝트 고유 폴더 생성 (output/YYYYMMDD_작업명/)
-    date_str = datetime.datetime.now().strftime("%Y%m%d_%H%M")
-    safe_slug = re.sub(r'[^a-zA-Z0-9가-힣]+', '_', user_prompt[:25]).strip('_') or "project"
-    project_folder_name = f"{date_str}_{safe_slug}"
-    project_output_dir = PROJECT_ROOT / "output" / project_folder_name
+    project_slug, display_title = extract_clean_project_slug_and_title(user_prompt)
+    target_project_dir_rel = f"projects/{project_slug}"
+    target_project_path = PROJECT_ROOT / "projects" / project_slug
+    target_project_path.mkdir(parents=True, exist_ok=True)
     
-    # 하위 에셋 디렉토리 생성
-    (project_output_dir / "audio").mkdir(parents=True, exist_ok=True)
-    (project_output_dir / "images").mkdir(parents=True, exist_ok=True)
-    (project_output_dir / "docs").mkdir(parents=True, exist_ok=True)
+    # 에셋 디렉토리 생성
+    (target_project_path / "css").mkdir(parents=True, exist_ok=True)
+    (target_project_path / "js").mkdir(parents=True, exist_ok=True)
+    (target_project_path / "images").mkdir(parents=True, exist_ok=True)
 
     current_agent = initial_agent
     current_message = user_prompt
     
     # 프롬프트에 활성 프로젝트 격리 출력 경로 컨텍스트 주입
-    context_header = f"[📁 활성 프로젝트 산출물 격리 경로: output/{project_folder_name}]\n(모든 기획서, DESIGN.md, 대본, 이미지, 코드는 반드시 위 폴더 및 projects/ 디렉토리에 생성하십시오)\n\n"
+    context_header = (
+        f"[📁 신규 프로젝트 산출물 디렉토리: {target_project_dir_rel}]\n"
+        f"• 🎨 디자인 규칙 문서: `{target_project_dir_rel}/DESIGN.md`\n"
+        f"• 🌐 메인 웹페이지 HTML: `{target_project_dir_rel}/index.html`\n"
+        f"(⚠️ 주의: 외부 URL은 벤치마킹 분석 대상이며, 새로 제작할 웹페이지 코드는 반드시 `projects/{project_slug}/index.html` 에 생성하십시오)\n\n"
+    )
     history = [{"role": "user", "content": context_header + user_prompt}]
     max_hops = 12
     hop = 0
     visited_agents = []
 
-    orchestrator.tracker.state["current_project"] = user_prompt[:40] + "..."
-    orchestrator.tracker.state["current_project_dir"] = f"output/{project_folder_name}"
+    orchestrator.tracker.state["current_project"] = display_title
+    orchestrator.tracker.state["current_project_dir"] = target_project_dir_rel
     orchestrator.tracker.save()
 
     while current_agent and hop < max_hops:
@@ -529,35 +547,31 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
     orchestrator.tracker.state["active_agent"] = "None"
     
     relay_path = " → ".join(visited_agents)
-    summary_text = user_prompt[:50] + ("..." if len(user_prompt) > 50 else "")
+    summary_text = display_title
     host = get_server_host()
-    info = get_project_summary_info(project_output_dir, user_prompt)
+    info = get_project_summary_info(target_project_dir_rel, user_prompt)
     
-    if info['has_html']:
-        preview_url = f"http://{host}:8080/{info['html_rel_path']}"
-    else:
-        preview_url = f"http://{host}:8080/{info['project_dir_rel']}/" if info['project_dir_rel'] else f"http://{host}:8080/ai_company/web/"
-        
+    preview_url = f"http://{host}:8080/{info['html_rel_path']}"
     orchestrator.tracker.state["current_preview_url"] = preview_url
     orchestrator.tracker.save()
     
-    file_list_str = "\n".join([f"• `{f}`" for f in info["files"][:6]]) if info["files"] else "• 산출물 생성 완료"
+    file_list_str = "\n".join([f"• `{f}`" for f in info["files"][:6]]) if info["files"] else f"• `{target_project_dir_rel}/index.html` 생성 완료"
 
     # 슬랙 직접 파일 첨부 (GCP 방화벽 상관없이 슬랙에서 HTML/DESIGN.md 바로 열람/다운로드)
-    if info.get("project_dir_rel"):
-        upload_project_files_to_slack(channel, thread_ts, info["project_dir_rel"])
+    if target_project_dir_rel:
+        upload_project_files_to_slack(channel, thread_ts, target_project_dir_rel)
         rev_chan = CHANNEL_MAP.get("output_review")
         if rev_chan and rev_chan != channel:
-            upload_project_files_to_slack(rev_chan, None, info["project_dir_rel"])
+            upload_project_files_to_slack(rev_chan, None, target_project_dir_rel)
 
     # 1. #hq-board: CEO 최종 완료 보고 (원본 스레드에)
     if len(visited_agents) > 2:
         post_as_agent(
             channel, "CEO",
-            f"✅ *[프로젝트 완료 보고]* `{summary_text}`\n"
+            f"✅ *[프로젝트 완료 보고]* {summary_text}\n"
             f"• 👥 릴레이: `{relay_path}`\n"
-            f"• 🌐 *라이브 웹 뷰어*: <{preview_url}|{preview_url}>\n"
-            f"• 📁 산출물 경로: `{info['project_dir_rel']}`\n"
+            f"• 🌐 *신규 라이브 웹 뷰어*: <{preview_url}|{preview_url}>\n"
+            f"• 📁 산출물 디렉토리: `{target_project_dir_rel}`\n"
             f"• 📋 생성 파일 ({info['total_files']}개):\n{file_list_str}",
             thread_ts
         )
@@ -576,8 +590,8 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
                 "fields": [
                     {"type": "mrkdwn", "text": f"*프로젝트:*\n{summary_text}"},
                     {"type": "mrkdwn", "text": f"*투입 에이전트 ({len(visited_agents)}명):*\n`{relay_path}`"},
-                    {"type": "mrkdwn", "text": f"*라이브 프리뷰:*\n<{preview_url}|{preview_url}>"},
-                    {"type": "mrkdwn", "text": f"*산출물 경로:*\n`{info['project_dir_rel']}`"}
+                    {"type": "mrkdwn", "text": f"*신규 라이브 프리뷰:*\n<{preview_url}|{preview_url}>"},
+                    {"type": "mrkdwn", "text": f"*산출물 경로:*\n`{target_project_dir_rel}`"}
                 ]
             },
             {
@@ -592,7 +606,7 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
                 "elements": [
                     {
                         "type": "button",
-                        "text": {"type": "plain_text", "text": "🌐 라이브 산출물 뷰어 열기", "emoji": True},
+                        "text": {"type": "plain_text", "text": "🌐 신규 라이브 웹페이지 열기", "emoji": True},
                         "url": preview_url,
                         "style": "primary"
                     },
@@ -612,7 +626,7 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
         review_blocks = [
             {
                 "type": "header",
-                "text": {"type": "plain_text", "text": "🔍 [개발팀장] 프로젝트 최종 검수 요청", "emoji": True}
+                "text": {"type": "plain_text", "text": "🔍 [개발팀장] 신규 프로젝트 최종 검수 요청", "emoji": True}
             },
             {
                 "type": "section",
@@ -621,8 +635,8 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
                     "text": (
                         f"*{summary_text}*\n"
                         f"개발 실무 릴레이(`사원A~E`)가 완료되어 최종 사용자 검수를 요청합니다.\n\n"
-                        f"🌐 *[라이브 웹 미리보기 링크]*\n👉 *<{preview_url}|{preview_url}>*\n"
-                        f"📁 *[산출물 디렉토리]*: `{info['project_dir_rel']}`"
+                        f"🌐 *[새로 제작된 웹페이지 라이브 링크]*\n👉 *<{preview_url}|{preview_url}>*\n"
+                        f"📁 *[산출물 디렉토리]*: `{target_project_dir_rel}`"
                     )
                 }
             },
