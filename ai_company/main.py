@@ -478,22 +478,12 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
     orchestrator.tracker.state["current_project_dir"] = target_project_dir_rel
     orchestrator.tracker.save()
 
+    pipeline_succeeded = False
+
     while current_agent and hop < max_hops:
         hop += 1
         visited_agents.append(current_agent)
         logger.info(f"Step {hop}: Running Agent -> {current_agent}")
-        
-        # 대상 부서 채널 결정
-        target_channel = get_target_channel(current_agent, channel)
-        
-        # 채널이 분기될 때 원래 채널에 안내 알림 (1회성)
-        if target_channel != channel and hop == 2:
-            post_as_agent(
-                channel, 
-                "CEO", 
-                f"🚀 *[부서 실무 릴레이 가동]* `{current_agent}`에게 프로젝트가 이관되었습니다. 세부 진행 및 개발 토론은 <#{target_channel}> 채널에서 실시간으로 진행됩니다.",
-                thread_ts
-            )
 
         # 상태 업데이트 (진행중)
         orchestrator.tracker.update_agent(
@@ -507,17 +497,22 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
             # LLM 호출 및 도구 실행
             response = orchestrator.call_agent_llm(current_agent, history)
         except Exception as e:
-            logger.error(f"Pipeline LLM call failed for {current_agent}: {e}")
+            err_msg = str(e)
+            logger.error(f"Pipeline LLM call failed for {current_agent}: {err_msg}")
             orchestrator.tracker.update_agent(
                 agent_name=current_agent,
                 status="실패",
-                task=f"LLM 호출 실패: {str(e)[:40]}"
+                task=f"실패: {err_msg[:40]}"
             )
+            post_as_agent(
+                channel, 
+                current_agent, 
+                f"⚠️ *[{current_agent} 실행 중단]* {err_msg}", 
+                thread_ts=thread_ts
+            )
+            # API 키 누락 또는 에러 발생 시 즉시 파이프라인 중단 (후속 사원 릴레이 및 완료 보고 차단)
             break
         
-        # 해당 부서 전용 채널(또는 요청 채널)에 '요약본 카드 + 전체본 보기 버튼'으로 회신
-        post_as_agent_with_summary(target_channel, current_agent, response, thread_ts if target_channel == channel else None)
-
         # 메인 채널을 어지럽히지 않고, 오직 요청이 들어온 원본 스레드(thread_ts) 안에만 2~3줄 심플 텍스트로 인수인계 보고
         post_as_agent_with_summary(channel, current_agent, response, thread_ts=thread_ts)
 
@@ -544,13 +539,20 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
         if next_agent:
             if next_agent in visited_agents and next_agent != "개발팀장":
                 logger.info(f"Loop prevention: {next_agent} already visited. Stopping pipeline.")
+                pipeline_succeeded = True
                 break
             current_agent = next_agent
             current_message = response
             time.sleep(1.5) # 부드러운 스레드 연결을 위한 대기
         else:
             logger.info("Pipeline completed or no further agent tagged.")
+            pipeline_succeeded = True
             break
+
+    # 파이프라인이 에러로 중단된 경우 완료 보고 발송 금지
+    if not pipeline_succeeded:
+        logger.warning("Pipeline aborted prematurely due to error. Skipping completion reports.")
+        return
 
     # 최종 완료 보고 — 미니멀 텍스트 구조
     orchestrator.tracker.state["progress_percent"] = 100
@@ -578,7 +580,7 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
         upload_project_files_to_slack(channel, thread_ts, target_project_dir_rel)
 
     # 1. 원본 요청 스레드: CEO 최종 완료 보고 (미니멀 텍스트)
-    if len(visited_agents) > 2:
+    if len(visited_agents) >= 2:
         if has_web:
             ceo_thread_msg = (
                 f"✅ *[프로젝트 완료 보고]* {summary_text}\n"

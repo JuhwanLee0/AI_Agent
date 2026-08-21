@@ -731,7 +731,7 @@ class CompanyOrchestrator:
         return None
 
     def get_client_candidates(self, agent_name: str) -> List[Dict[str, Any]]:
-        """에이전트 설정에 따라 주력 모델 및 서브(폴백) 모델 후보 목록 추출"""
+        """에이전트 설정에 따라 Cerebras 및 Groq 듀얼 클라우드 후보 목록 추출 (어느 한쪽 키만 있어도 100% 자동 가동)"""
         config = AGENTS.get(agent_name)
         if not config:
             return []
@@ -740,76 +740,41 @@ class CompanyOrchestrator:
         cerebras_key = (os.getenv("CEREBRAS_API_KEY_1") or os.getenv("CEREBRAS_API_KEY_2") or os.getenv("CEREBRAS_API_KEY_3") or os.getenv("CEREBRAS_API_KEY", "")).strip()
         groq_key = (os.getenv("GROQ_API_KEY_1") or os.getenv("GROQ_API_KEY_2") or os.getenv("GROQ_API_KEY_3") or os.getenv("GROQ_API_KEY", "")).strip()
         
-        # .env에 지정된 서브 모델 (MODEL_CEO_SUB, MODEL_MANAGER_SUB, MODEL_WORKER_SUB)
-        sub_model_env = f"{config.model_env}_SUB"
-        custom_sub_model = os.getenv(sub_model_env, "").strip()
-        
         candidates = []
         
-        # 1. [주력 모델] (Primary Model)
-        if provider == "cerebras" and cerebras_key:
+        # 1. Cerebras API 키가 있는 경우
+        if cerebras_key:
+            c_model = model_id if provider == "cerebras" else ("gpt-oss-120bProduction" if config.model_env == "MODEL_CEO" else "gemma-4-31bPreview")
             candidates.append({
-                "provider": "Cerebras (주력)",
+                "provider": "Cerebras",
                 "base_url": "https://api.cerebras.ai/v1",
                 "api_key": cerebras_key,
-                "model": model_id
-            })
-        elif provider == "groq" and groq_key:
-            candidates.append({
-                "provider": "Groq (주력)",
-                "base_url": "https://api.groq.com/openai/v1",
-                "api_key": groq_key,
-                "model": model_id
+                "model": c_model
             })
             
-        # 2. [서브 / 폴백 모델] (Sub / Fallback Model)
-        if custom_sub_model:
-            sub_p = "cerebras" if custom_sub_model.startswith("cerebras/") or "gemma" in custom_sub_model.lower() else "groq"
-            sub_m = custom_sub_model.replace("cerebras/", "").replace("groq/", "")
-            sub_key = cerebras_key if sub_p == "cerebras" else groq_key
-            if sub_key:
-                candidates.append({
-                    "provider": f"{sub_p.capitalize()} (서브)",
-                    "base_url": "https://api.cerebras.ai/v1" if sub_p == "cerebras" else "https://api.groq.com/openai/v1",
-                    "api_key": sub_key,
-                    "model": sub_m
-                })
-        else:
-            # 기본 서브 모델 자동 구성
-            if groq_key and provider != "groq":
-                default_groq_sub = "compound" if config.model_env == "MODEL_CEO" else ("qwen/qwen3.6-27b" if "dev" in config.department else "openai/gpt-oss-20b")
-                candidates.append({
-                    "provider": "Groq (서브)",
-                    "base_url": "https://api.groq.com/openai/v1",
-                    "api_key": groq_key,
-                    "model": default_groq_sub
-                })
-            elif cerebras_key and provider != "cerebras":
-                candidates.append({
-                    "provider": "Cerebras (서브)",
-                    "base_url": "https://api.cerebras.ai/v1",
-                    "api_key": cerebras_key,
-                    "model": "gpt-oss-120bProduction"
-                })
+        # 2. Groq API 키가 있는 경우 (Cerebras 실패 시 또는 Groq 단독 구동 시)
+        if groq_key:
+            g_model = model_id if provider == "groq" else ("llama-3.3-70b-versatile" if config.model_env in ["MODEL_CEO", "MODEL_MANAGER"] else "llama-3.1-8b-instant")
+            candidates.append({
+                "provider": "Groq",
+                "base_url": "https://api.groq.com/openai/v1",
+                "api_key": groq_key,
+                "model": g_model
+            })
             
         return candidates
 
     def call_agent_llm(self, agent_name: str, conversation_history: List[Dict[str, str]]) -> str:
         config = AGENTS.get(agent_name)
         if not config:
-            return f"Error: Agent '{agent_name}' not found."
+            raise ValueError(f"Unknown agent '{agent_name}'")
 
         system_prompt = self.load_system_prompt(agent_name)
         candidates = self.get_client_candidates(agent_name)
 
         if not candidates:
-            # API 키가 설정되지 않은 상태 안내
-            provider, model_id = config.get_provider_and_model()
-            logger.warning(f"No active API keys found for {agent_name} ({provider} / {model_id})")
-            return (
-                f"⚠️ *[{agent_name} 에이전트 대기 모드]*\n"
-                f"현재 `.env` 파일에 `{provider.upper()}_API_KEY`가 입력되지 않았습니다.\n"
-                f"`.env` 파일에 발급받으신 Groq 또는 Cerebras API 키를 입력해 주시면 즉시 가동됩니다."
+            raise RuntimeError(
+                f"현재 .env 파일에 CEREBRAS_API_KEY 또는 GROQ_API_KEY가 입력되지 않았습니다. .env에 발급받으신 AI 키를 입력해 주십시오."
             )
 
         try:
