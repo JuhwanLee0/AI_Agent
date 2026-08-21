@@ -147,12 +147,20 @@ class KeyPoolManager:
             )
             return None, "CEO 20% 안전 비축분 보호로 차용 차단"
 
+    def get_available_key(self, role: str = "worker") -> Tuple[Optional[str], str]:
+        key, _ = self.get_initial_key(role)
+        if not key:
+            key, _ = self.get_fallback_key(role)
+        model_name = get_gemini_model(role)
+        return key, model_name
+
 # 글로벌 인스턴스
 key_pool = KeyPoolManager()
 
 def get_gemini_key(role: str = "worker") -> str:
     key, _ = key_pool.get_initial_key(role)
     return key
+
 
 # 하위 호환용 기본 키
 GEMINI_API_KEY = get_gemini_key("worker")
