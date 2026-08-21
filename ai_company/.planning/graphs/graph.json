@@ -1,0 +1,34 @@
+{
+  "version": "2.0",
+  "total_nodes": 18,
+  "god_nodes": [
+    "agents/orchestrator.py",
+    "instructions/instruction.md",
+    "main.py"
+  ],
+  "nodes": [
+    { "id": "main.py", "type": "module" },
+    { "id": "agents/orchestrator.py", "type": "module" },
+    { "id": "instructions/instruction.md", "type": "doc" },
+    { "id": "instructions/ceo_instruction.md", "type": "doc" },
+    { "id": "instructions/dev_instruction.md", "type": "doc" },
+    { "id": "instructions/marketing_instruction.md", "type": "doc" },
+    { "id": "instructions/media_instruction.md", "type": "doc" },
+    { "id": "skills/global/gsd_workflow.md", "type": "skill" },
+    { "id": "skills/global/graphify_architecture.md", "type": "skill" },
+    { "id": "skills/global/ponytail_pragmatism.md", "type": "skill" },
+    { "id": "memory/agent_memory.json", "type": "memory" },
+    { "id": ".planning/STATE.md", "type": "planning" },
+    { "id": ".planning/ROADMAP.md", "type": "planning" }
+  ],
+  "edges": [
+    { "source": "main.py", "target": "agents/orchestrator.py", "relation": "imports" },
+    { "source": "agents/orchestrator.py", "target": "instructions/instruction.md", "relation": "enforces" },
+    { "source": "agents/orchestrator.py", "target": "instructions/ceo_instruction.md", "relation": "loads" },
+    { "source": "agents/orchestrator.py", "target": "instructions/dev_instruction.md", "relation": "loads" },
+    { "source": "agents/orchestrator.py", "target": "instructions/marketing_instruction.md", "relation": "loads" },
+    { "source": "agents/orchestrator.py", "target": "instructions/media_instruction.md", "relation": "loads" },
+    { "source": "agents/orchestrator.py", "target": ".planning/STATE.md", "relation": "syncs_state" },
+    { "source": "agents/orchestrator.py", "target": "memory/agent_memory.json", "relation": "reads_writes_memory" }
+  ]
+}

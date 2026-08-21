@@ -1,0 +1,772 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Company — 픽셀 오피스 (Pixel Office)</title>
+<style>
+  :root {
+    --bg: #061215;
+    --floor-wood1: #3a2b1f;
+    --floor-wood2: #241a12;
+    --ink: #e0f6f4;
+    --accent: #ffd33d;
+    --teal: #1fd9c0;
+    --dim: #5c8585;
+    --border: rgba(31, 217, 192, 0.45);
+    --panel-bg: rgba(6, 20, 24, 0.94);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); overflow: hidden; }
+  body { font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--ink); user-select: none; }
+  
+  #wrap { position: relative; width: 100vw; height: 100vh; }
+  canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; cursor: pointer; }
+
+  /* ── CCTV 오버레이 ── */
+  #cctv { position: absolute; inset: 0; pointer-events: none; }
+  #cctv .scan { position: absolute; inset: 0; background: repeating-linear-gradient(to bottom, rgba(0,0,0,.22) 0 1px, transparent 1px 3px); opacity: var(--scan, .50); }
+  #cctv .vig { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 48%, rgba(0,0,0,.78) 100%); opacity: var(--vig, 1); }
+  #cctv .corner { position: absolute; width: 36px; height: 36px; border: 3px solid rgba(255,255,255,.55); }
+  #cctv .tl { top: 16px; left: 16px; border-right: 0; border-bottom: 0; }
+  #cctv .tr { top: 16px; right: 16px; border-left: 0; border-bottom: 0; }
+  #cctv .bl { bottom: 16px; left: 16px; border-right: 0; border-top: 0; }
+  #cctv .br { bottom: 16px; right: 16px; border-left: 0; border-top: 0; }
+
+  /* ── 상단 헤더 & HUD ── */
+  #topBar {
+    position: absolute; top: 16px; left: 60px; right: 60px;
+    display: flex; justify-content: space-between; align-items: center;
+    pointer-events: auto;
+  }
+  .rec-block { display: flex; align-items: center; gap: 10px; font: 700 14px/1 ui-monospace, monospace; letter-spacing: .12em; }
+  .rec-dot { width: 10px; height: 10px; border-radius: 50%; background: #ff3b30; animation: blink 1.3s infinite; }
+  @keyframes blink { 0%, 45% { opacity: 1; } 55%, 100% { opacity: .15; } }
+  
+  .cam-title { font: 700 14px/1 ui-monospace, monospace; color: var(--teal); letter-spacing: .08em; }
+
+  /* ── 실시간 프로젝트 진행 바 ── */
+  #projectBanner {
+    position: absolute; top: 52px; left: 60px; width: min(440px, 40vw);
+    background: rgba(6, 20, 24, 0.88); border: 1px solid rgba(31,217,192,0.3);
+    border-radius: 8px; padding: 10px 14px; backdrop-filter: blur(6px);
+    pointer-events: auto;
+  }
+  .proj-title { font-size: 13px; font-weight: 700; color: #fff; display: flex; justify-content: space-between; margin-bottom: 6px; }
+  .proj-phase { font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .proj-bar-bg { background: rgba(255,255,255,0.1); height: 6px; border-radius: 3px; overflow: hidden; margin-top: 6px; }
+  .proj-bar-fill { background: linear-gradient(90deg, #1fd9c0, #ffd33d); height: 100%; width: 0%; transition: width 0.6s ease; }
+
+  /* ── 컨트롤 버튼 바 (하단 중앙) ── */
+  #controls {
+    position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 8px; background: rgba(6, 20, 24, 0.90);
+    border: 1px solid rgba(31,217,192,0.4); border-radius: 24px; padding: 6px 14px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.6); backdrop-filter: blur(8px);
+    pointer-events: auto; z-index: 10;
+  }
+  .btn {
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(31,217,192,0.3);
+    color: var(--ink); border-radius: 16px; padding: 6px 13px; font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: all .15s ease; display: inline-flex; align-items: center; gap: 5px;
+  }
+  .btn:hover { background: rgba(31,217,192,0.22); color: #fff; border-color: var(--teal); transform: translateY(-1px); }
+  .btn.active { background: var(--teal); color: #061215; font-weight: 700; }
+  .btn-gold { border-color: rgba(255,211,61,0.5); }
+  .btn-gold:hover { background: rgba(255,211,61,0.25); color: #fff; }
+
+  /* ── 하단 좌우 정보 ── */
+  #ticker { position: absolute; left: 60px; bottom: 24px; font: 600 12px/1.7 ui-monospace, monospace; color: var(--teal); opacity: .85; max-width: 32vw; pointer-events: none; }
+  #hudInfo { position: absolute; right: 60px; bottom: 24px; text-align: right; font-size: 13px; line-height: 1.6; opacity: .9; pointer-events: none; }
+  #hudInfo b { color: var(--accent); font-size: 20px; }
+
+  /* ── 직원 상세 카드 (클릭 팝업) ── */
+  #card {
+    position: absolute; right: 60px; top: 72px; width: min(390px, 35vw);
+    background: var(--panel-bg); border: 2px solid var(--teal);
+    border-radius: 12px; padding: 18px 20px 16px; box-shadow: 0 12px 36px rgba(0,0,0,.75);
+    backdrop-filter: blur(10px); z-index: 20;
+  }
+  #card .card-head { display: flex; justify-content: space-between; align-items: flex-start; }
+  #card .nm { font-size: 20px; font-weight: 800; color: var(--accent); }
+  #card .dept-tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 700; background: rgba(31,217,192,0.18); color: var(--teal); }
+  #card .rl { margin-top: 6px; font-size: 13.5px; line-height: 1.6; color: var(--ink); opacity: .95; }
+  #card dl { margin: 12px 0 0; display: grid; gap: 8px; }
+  #card dl > div { display: flex; gap: 10px; font-size: 12px; line-height: 1.5; }
+  #card dt { flex: 0 0 52px; color: var(--dim); font-weight: 700; }
+  #card dd { margin: 0; color: var(--ink); opacity: .9; word-break: break-all; }
+  #card .dispatch-box { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; gap: 6px; }
+  #card input { flex-grow: 1; background: rgba(0,0,0,0.4); border: 1px solid rgba(31,217,192,0.3); border-radius: 6px; color: #fff; padding: 6px 10px; font-size: 12px; }
+  #card input:focus { outline: none; border-color: var(--teal); }
+  #cardX { position: absolute; right: 12px; top: 10px; background: none; border: 0; color: var(--dim); font-size: 22px; cursor: pointer; }
+  #cardX:hover { color: #fff; }
+
+  [data-cctv="lo"] #cctv { --scan: .14; --vig: .40; }
+  [data-cctv="off"] #cctv { display: none; }
+</style>
+</head>
+<body data-cctv="hi">
+<div id="wrap">
+  <canvas id="c"></canvas>
+  
+  <div id="cctv">
+    <div class="scan"></div><div class="vig"></div>
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
+  </div>
+
+  <div id="topBar">
+    <div class="rec-block">
+      <div class="rec-dot"></div><span>LIVE REC</span>
+      <span style="opacity:.6">·</span>
+      <span class="cam-title">CAM 01 · HQ MAIN FLOOR</span>
+    </div>
+    <div style="font: 700 15px/1 ui-monospace, monospace; letter-spacing: .1em;" id="tc">00:00:00</div>
+  </div>
+
+  <div id="projectBanner">
+    <div class="proj-title">
+      <span id="bannerProjName">AI 비즈니스 OS 파이프라인</span>
+      <span id="bannerProgText" style="color:var(--accent);">0%</span>
+    </div>
+    <div class="proj-phase" id="bannerPhaseText">대기 중</div>
+    <div class="proj-bar-bg"><div class="proj-bar-fill" id="bannerProgBar"></div></div>
+  </div>
+
+  <div id="controls">
+    <button class="btn btn-gold" id="btnSimulate">🚀 전 부서 협업 시뮬레이션</button>
+    <button class="btn" id="btnDemoDev">🏛️ 개발팀</button>
+    <button class="btn" id="btnDemoMkt">📈 마케팅팀</button>
+    <button class="btn" id="btnDemoMed">🎬 미디어팀</button>
+    <button class="btn" id="btnCctv">📡 CCTV 모드</button>
+    <button class="btn" id="btnSound">🔊 8-Bit 사운드</button>
+  </div>
+
+  <div id="ticker"></div>
+  
+  <div id="hudInfo">
+    <b id="activeNum">0</b> / <span id="totNum">0</span> 명 가동중<br>
+    <span id="zoneSummary" style="color:var(--dim); font-size:12px;"></span>
+  </div>
+
+  <div id="card" hidden>
+    <button id="cardX" aria-label="닫기">×</button>
+    <div class="card-head">
+      <div>
+        <div class="nm" id="cName">CEO</div>
+        <div class="rl" id="cRole">최고경영자</div>
+      </div>
+      <span class="dept-tag" id="cDept">경영진</span>
+    </div>
+    <dl>
+      <div><dt>현재상태</dt><dd id="cNow">-</dd></div>
+      <div><dt>근무위치</dt><dd id="cZone">-</dd></div>
+      <div><dt>사용모델</dt><dd id="cModel">gemini-2.5-pro</dd></div>
+      <div><dt>스펙정의</dt><dd id="cFile">-</dd></div>
+    </dl>
+    <div class="dispatch-box">
+      <input type="text" id="dispatchInput" placeholder="직접 업무 지시 입력..." />
+      <button class="btn btn-gold" id="btnSendDispatch">지시</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Web Audio API 8-Bit 레트로 사운드 신시사이저 ──
+let audioCtx = null;
+let soundEnabled = true;
+function initAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+function playTone(freq, type, duration, vol=0.08) {
+  if (!soundEnabled || !audioCtx) return;
+  try {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+  } catch(e){}
+}
+function sfxType() { playTone(500 + Math.random()*200, 'square', 0.04, 0.02); }
+function sfxEvent() { playTone(660, 'triangle', 0.08, 0.06); setTimeout(()=>playTone(880, 'triangle', 0.1, 0.06), 60); }
+function sfxChime() { playTone(587, 'sine', 0.2, 0.1); setTimeout(()=>playTone(880, 'sine', 0.35, 0.1), 120); }
+
+// ── 캔버스 및 레이아웃 ──
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = cv.clientWidth; H = cv.clientHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  layout();
+}
+addEventListener('resize', resize);
+
+// ── 6대 부서 & 기능 구역 정의 ──
+const ZONES = {
+  ceo:       { x: .05,  y: .20, w: .22, h: .34, label: '👑 CEO 집무실',   color: 'rgba(22,34,54,0.72)' },
+  meeting:   { x: .29,  y: .20, w: .38, h: .34, label: '🤝 전략 회의실', color: 'rgba(34,36,60,0.72)' },
+  research:  { x: .69,  y: .20, w: .26, h: .34, label: '📚 리서치 서고',   color: 'rgba(24,46,36,0.72)' },
+  dev:       { x: .05,  y: .57, w: .30, h: .38, label: '🏛️ 개발본부',     color: 'rgba(16,48,46,0.72)' },
+  marketing: { x: .37,  y: .57, w: .30, h: .38, label: '📈 마케팅본부',   color: 'rgba(56,32,24,0.72)' },
+  media:     { x: .69,  y: .57, w: .26, h: .38, label: '🎬 미디어본부',   color: 'rgba(44,28,62,0.72)' },
+  server:    { x: .23,  y: .57, w: .12, h: .38, label: '서버랙',         color: 'rgba(16,36,44,0.72)' },
+  waiting:   { x: .05,  y: .20, w: .22, h: .34, label: '승인대기',       color: 'rgba(58,46,20,0.72)' },
+  lounge:    { x: .37,  y: .78, w: .30, h: .17, label: '휴게 라운지',     color: 'rgba(48,40,32,0.70)' },
+  error:     { x: .69,  y: .82, w: .26, h: .13, label: '버그존',         color: 'rgba(70,26,26,0.72)' }
+};
+
+let Z = {};
+let ANCHORS = {};
+
+function layout() {
+  Z = {};
+  for (const [k, z] of Object.entries(ZONES)) {
+    Z[k] = { x: z.x * W, y: z.y * H, w: z.w * W, h: z.h * H, label: z.label, color: z.color };
+  }
+  buildAnchors();
+}
+
+function buildAnchors() {
+  const grid = (z, cols, rows, padTop) => {
+    const out = [];
+    const pt = padTop ?? Math.min(z.h * 0.22, 48);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        out.push({
+          x: z.x + z.w * ((c + 0.5) / cols),
+          y: z.y + pt + (z.h - pt) * ((r + 0.55) / rows)
+        });
+      }
+    }
+    return out;
+  };
+
+  ANCHORS = {
+    ceo:       grid(Z.ceo, 1, 1),
+    meeting:   grid(Z.meeting, 3, 2),
+    research:  grid(Z.research, 2, 2),
+    dev:       grid(Z.dev, 3, 2),
+    marketing: grid(Z.marketing, 3, 2),
+    media:     grid(Z.media, 2, 2),
+    server:    grid(Z.server, 1, 2),
+    waiting:   grid(Z.ceo, 1, 1),
+    lounge:    grid(Z.lounge, 2, 1),
+    error:     grid(Z.error, 2, 1)
+  };
+}
+
+function anchorsFor(zoneKey) { return ANCHORS[zoneKey] || ANCHORS.dev; }
+
+function seatPos(idx, count, zoneKey) {
+  const a = anchorsFor(zoneKey);
+  if (count <= a.length) return { x: a[idx].x, y: a[idx].y };
+  const z = Z[zoneKey] || Z.dev;
+  const pt = Math.min(z.h * 0.22, 48);
+  let cols = Math.max(1, Math.round(Math.sqrt(count * (z.w / Math.max(1, z.h)) * 0.65)));
+  cols = Math.min(cols, count);
+  const rows = Math.ceil(count / cols);
+  const cx = idx % cols, cy = Math.floor(idx / cols);
+  return {
+    x: z.x + z.w * ((cx + 0.5) / cols),
+    y: z.y + pt + (z.h - pt) * ((cy + 0.55) / rows)
+  };
+}
+
+// ── 상태 및 폴링 ──
+let org = { agents: [], count: 0 };
+let people = new Map();
+let logLines = [];
+const T0 = performance.now();
+let selectedId = null;
+
+async function poll() {
+  try {
+    const s = await (await fetch('/state', { cache: 'no-store' })).json();
+    
+    // 프로젝트 진행도 업데이트
+    if (s.project) {
+      document.getElementById('bannerProjName').textContent = s.project.current_project || '가상 기업 파이프라인';
+      const pct = s.project.progress_percent || 0;
+      document.getElementById('bannerProgText').textContent = pct + '%';
+      document.getElementById('bannerProgBar').style.width = pct + '%';
+      document.getElementById('bannerPhaseText').textContent = s.project.active_phase || '가동 중';
+    }
+
+    document.getElementById('activeNum').textContent = s.workers.length;
+    document.getElementById('totNum').textContent = s.org_count;
+
+    const seen = new Set();
+    const zc = {};
+    const byZone = new Map();
+    for (const w of s.workers) {
+      if (!byZone.has(w.zone)) byZone.set(w.zone, []);
+      byZone.get(w.zone).push(w);
+    }
+
+    for (const [zoneKey, list] of byZone) {
+      zc[zoneKey] = list.length;
+      list.sort((a, b) => a.seat - b.seat);
+      list.forEach((w, i) => {
+        seen.add(w.id);
+        let p = people.get(w.id);
+        const tgt = seatPos(i, list.length, w.zone);
+        if (!p) {
+          p = {
+            name: w.name, role: w.role, department: w.department, zone: w.zone,
+            x: tgt.x, y: H * 1.05, tx: tgt.x, ty: tgt.y,
+            bob: Math.random() * 6.28, blink: 0, face: 1, tool: w.tool, task: w.task,
+            tunic: w.tunic || '#1b7a82', topknot: (w.name.length % 2 === 0)
+          };
+          people.set(w.id, p);
+          sfxEvent();
+        }
+        p.name = w.name; p.role = w.role; p.department = w.department;
+        p.zone = w.zone; p.tool = w.tool; p.task = w.task; p.idle = w.idle;
+        if (Math.abs(p.tx - tgt.x) > 1) p.face = tgt.x >= p.x ? 1 : -1;
+        p.tx = tgt.x; p.ty = tgt.y;
+      });
+    }
+
+    for (const id of [...people.keys()]) if (!seen.has(id)) people.delete(id);
+
+    document.getElementById('zoneSummary').textContent =
+      Object.entries(zc).map(([k, v]) => `${(ZONES[k] || {}).label || k} ${v}`).join(' · ');
+
+    logLines = (s.log || []).slice(-4).map(l => `▸ ${l.name || l.id || ''} ${l.tool || l.kind || ''}: ${l.task || ''}`.trim());
+    if (selectedId) renderCard();
+  } catch(e) {}
+}
+setInterval(poll, 750);
+poll();
+
+// ── 배경 렌더링 (원목 마루 + 벽면 + 야경 창문) ──
+function drawOfficeFloor() {
+  const WALL_H = Math.round(H * 0.17);
+
+  // 1. 원목 바닥
+  const g = ctx.createLinearGradient(0, WALL_H, 0, H);
+  g.addColorStop(0, '#3e2e21'); g.addColorStop(1, '#261c14');
+  ctx.fillStyle = g; ctx.fillRect(0, WALL_H, W, H - WALL_H);
+
+  const pw = Math.max(36, Math.round(W / 36));
+  ctx.globalAlpha = .45;
+  for (let x = 0; x < W; x += pw) {
+    ctx.fillStyle = ((x / pw) | 0) % 2 ? 'rgba(255,225,190,.04)' : 'rgba(0,0,0,.12)';
+    ctx.fillRect(x, WALL_H, pw - 2, H - WALL_H);
+  }
+  ctx.globalAlpha = 1;
+  for (let y = WALL_H + pw; y < H; y += pw * 2) {
+    ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.fillRect(0, y, W, 2);
+  }
+
+  // 2. 뒷벽
+  const wg = ctx.createLinearGradient(0, 0, 0, WALL_H);
+  wg.addColorStop(0, '#10252b'); wg.addColorStop(1, '#09161a');
+  ctx.fillStyle = wg; ctx.fillRect(0, 0, W, WALL_H);
+  ctx.fillStyle = '#4e3926'; ctx.fillRect(0, WALL_H - 12, W, 12);
+  ctx.fillStyle = 'rgba(0,0,0,.38)'; ctx.fillRect(0, WALL_H, W, 10);
+
+  // 3. 야경 창문
+  const now = performance.now() / 1000;
+  const wy = Math.round(H * .035), wh = Math.round(H * .105);
+  for (let k = 0; k < 3; k++) {
+    const wx = W * (0.08 + k * 0.14), ww = W * 0.11;
+    ctx.fillStyle = '#061318'; ctx.fillRect(wx, wy, ww, wh);
+    ctx.save(); ctx.beginPath(); ctx.rect(wx, wy, ww, wh); ctx.clip();
+    for (let b = 0; b < 6; b++) {
+      const bx = wx + b * (ww / 6), bh = wh * (0.35 + ((b * 5 + k * 2) % 4) / 7);
+      ctx.fillStyle = '#0a2128'; ctx.fillRect(bx, wy + wh - bh, ww / 6 - 2, bh);
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 2; c++) {
+        if (((b * 7 + r * 3 + c * 2 + k) % 3) === 0) continue;
+        ctx.fillStyle = ((b + r + c) % 5 === 0) ? 'rgba(255,214,140,.85)' : 'rgba(150,210,230,.30)';
+        ctx.fillRect(bx + 3 + c * 7, wy + wh - bh + 5 + r * 8, 4, 5);
+      }
+    }
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(200,230,235,.28)'; ctx.lineWidth = 2.5;
+    ctx.strokeRect(wx, wy, ww, wh);
+    ctx.fillStyle = 'rgba(200,230,235,.20)'; ctx.fillRect(wx + ww / 2 - 1, wy, 2, wh);
+  }
+
+  // 4. 벽면 시계 및 회사 로고
+  const cx0 = W * 0.50, cy0 = wy + wh * 0.45;
+  ctx.fillStyle = '#ece8dd'; ctx.beginPath(); ctx.arc(cx0, cy0, 16, 0, 6.3); ctx.fill();
+  ctx.strokeStyle = '#241a12'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx0, cy0); ctx.lineTo(cx0 + Math.cos(now * 0.1 - 1.57) * 10, cy0 + Math.sin(now * 0.1 - 1.57) * 10); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx0, cy0); ctx.lineTo(cx0 + Math.cos(now - 1.57) * 13, cy0 + Math.sin(now - 1.57) * 13); ctx.stroke();
+
+  ctx.font = '700 13px ui-monospace, monospace';
+  ctx.fillStyle = 'rgba(31,217,192,0.85)';
+  ctx.fillText("AI COMPANY VIRTUAL HQ", W * 0.54, wy + wh * 0.55);
+}
+
+// ── 구역별 카펫 및 가구 소품 ──
+function drawZoneDecorations() {
+  const t = performance.now() / 1000;
+  const s = Math.max(10, Math.round(W / 96));
+
+  for (const [k, z] of Object.entries(Z)) {
+    if (k === 'waiting' || k === 'server' || k === 'lounge' || k === 'error') continue;
+    ctx.fillStyle = z.color;
+    ctx.fillRect(z.x, z.y, z.w, z.h);
+    ctx.strokeStyle = 'rgba(31,217,192,.25)';
+    ctx.setLineDash([5, 5]); ctx.strokeRect(z.x, z.y, z.w, z.h); ctx.setLineDash([]);
+
+    // 구역 이름표
+    ctx.font = `700 ${Math.max(11, Math.round(W / 110))}px "Pretendard", sans-serif`;
+    const lw = ctx.measureText(z.label).width;
+    ctx.fillStyle = 'rgba(6,18,22,.85)';
+    ctx.fillRect(z.x + 6, z.y + 6, lw + 14, 22);
+    ctx.fillStyle = 'rgba(223,246,244,.90)';
+    ctx.fillText(z.label, z.x + 13, z.y + 21);
+  }
+
+  // 회의실 화이트보드
+  const m = Z.meeting;
+  ctx.fillStyle = '#f0ece1'; ctx.fillRect(m.x + m.w * 0.28, m.y + s * 0.7, m.w * 0.44, s * 1.5);
+  ctx.fillStyle = '#b0aba0'; ctx.fillRect(m.x + m.w * 0.28, m.y + s * 2.2, m.w * 0.44, s * 0.12);
+  const wf = 0.5 + 0.5 * Math.sin(t * 0.5);
+  ctx.fillStyle = '#2f7bbd'; ctx.fillRect(m.x + m.w * 0.31, m.y + s * 0.9, m.w * 0.38 * wf, s * 0.12);
+  ctx.fillStyle = '#d9534f'; ctx.fillRect(m.x + m.w * 0.31, m.y + s * 1.2, m.w * 0.30, s * 0.10);
+  ctx.fillStyle = '#4cae4c'; ctx.fillRect(m.x + m.w * 0.31, m.y + s * 1.45, m.w * 0.34 * wf, s * 0.10);
+
+  // 리서치실 서가
+  const rz = Z.research;
+  drawShelf(rz.x + rz.w * 0.15, rz.y + s * 1.8, s * 0.85);
+  drawShelf(rz.x + rz.w * 0.85, rz.y + s * 1.8, s * 0.85);
+
+  // 서버랙
+  const sv = Z.server;
+  drawServerRack(sv.x + sv.w * 0.5, sv.y + sv.h * 0.4, s * 0.85, t);
+
+  // 미디어 비디오 장비
+  const md = Z.media;
+  ctx.fillStyle = '#2a2f38'; ctx.fillRect(md.x + md.w * 0.82, md.y + s * 1.4, s * 0.8, s * 1.2);
+  ctx.fillStyle = '#1fd9c0'; ctx.fillRect(md.x + md.w * 0.84, md.y + s * 1.6, s * 0.6, s * 0.4);
+}
+
+function drawShelf(x, y, s) {
+  ctx.fillStyle = '#4e3a29'; ctx.fillRect(x - s * 1.2, y - s * 1.5, s * 2.4, s * 2.6);
+  ctx.fillStyle = '#6e533d'; ctx.fillRect(x - s * 1.1, y - s * 1.4, s * 2.2, s * 2.4);
+  const BOOKS = ['#c2553f', '#3f7fa8', '#c8a13f', '#57935f', '#8a5aa0'];
+  for (let r = 0; r < 3; r++) {
+    ctx.fillStyle = '#4e3a29'; ctx.fillRect(x - s * 1.1, y - s * 0.6 + r * s * 0.8, s * 2.2, s * 0.12);
+    for (let b = 0; b < 6; b++) {
+      ctx.fillStyle = BOOKS[(r * 6 + b) % BOOKS.length];
+      ctx.fillRect(x - s * 1.0 + b * s * 0.33, y - s * 1.3 + r * s * 0.8, s * 0.26, s * 0.65);
+    }
+  }
+}
+
+function drawServerRack(x, y, s, t) {
+  ctx.fillStyle = '#1c2027'; ctx.fillRect(x - s * 1.0, y - s * 1.6, s * 2.0, s * 3.2);
+  ctx.fillStyle = '#12151b';
+  for (let r = 0; r < 8; r++) {
+    ctx.fillRect(x - s * 0.9, y - s * 1.5 + r * s * 0.38, s * 1.8, s * 0.30);
+    const on = Math.sin(t * 2.5 + r * 1.4) > -0.2;
+    ctx.fillStyle = on ? '#1fd9c0' : '#0c443d';
+    ctx.fillRect(x - s * 0.75, y - s * 1.44 + r * s * 0.38, s * 0.15, s * 0.15);
+    ctx.fillStyle = (r % 2 === 0 && on) ? '#ffd33d' : '#473a14';
+    ctx.fillRect(x - s * 0.55, y - s * 1.44 + r * s * 0.38, s * 0.15, s * 0.15);
+    ctx.fillStyle = '#12151b';
+  }
+}
+
+function drawDesk(x, y, s, seed) {
+  const lit = 0.55 + 0.45 * Math.abs(Math.sin(performance.now() / 850 + seed));
+  // 책상 상판 & 다리
+  ctx.fillStyle = '#7a5a3e'; ctx.fillRect(x - s * 1.6, y - s * 0.1, s * 3.2, s * 0.35);
+  ctx.fillStyle = '#5c432d'; ctx.fillRect(x - s * 1.6, y + s * 0.25, s * 3.2, s * 0.22);
+  ctx.fillStyle = '#3f2d1e'; ctx.fillRect(x - s * 1.4, y + s * 0.47, s * 0.24, s * 0.65);
+  ctx.fillRect(x + s * 1.16, y + s * 0.47, s * 0.24, s * 0.65);
+  // 듀얼 모니터
+  ctx.fillStyle = '#222730'; ctx.fillRect(x - s * 1.1, y - s * 1.6, s * 2.2, s * 1.2);
+  ctx.fillStyle = `rgba(31,217,192,${0.5 + 0.4 * lit})`;
+  ctx.fillRect(x - s * 1.0, y - s * 1.5, s * 2.0, s * 1.0);
+  // 스크롤되는 코드 라인
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  for (let r = 0; r < 4; r++) {
+    ctx.fillRect(x - s * 0.9, y - s * 1.4 + r * s * 0.23, s * (0.6 + ((seed + r) % 3) * 0.35), s * 0.08);
+  }
+  // 키보드 & 커피 머그
+  ctx.fillStyle = '#2e3440'; ctx.fillRect(x - s * 0.7, y - s * 0.05, s * 1.4, s * 0.18);
+  ctx.fillStyle = '#d08770'; ctx.fillRect(x + s * 0.85, y - s * 0.12, s * 0.28, s * 0.28);
+}
+
+function drawAllFurniture() {
+  const s = Math.max(10, Math.round(W / 96)) * 0.75;
+  (ANCHORS.dev || []).forEach((a, i) => drawDesk(a.x, a.y - s * 3.4, s * 0.92, i));
+  (ANCHORS.marketing || []).forEach((a, i) => drawDesk(a.x, a.y - s * 3.4, s * 0.92, i + 10));
+  (ANCHORS.media || []).forEach((a, i) => drawDesk(a.x, a.y - s * 3.4, s * 0.92, i + 20));
+  if (ANCHORS.ceo && ANCHORS.ceo[0]) drawDesk(ANCHORS.ceo[0].x, ANCHORS.ceo[0].y - s * 3.4, s * 1.1, 99);
+}
+
+// ── 캐릭터 렌더링 ──
+let labelBoxes = [];
+
+function drawPerson(p, dt) {
+  const dx = p.tx - p.x, dy = p.ty - p.y;
+  const dist = Math.hypot(dx, dy);
+  const moving = dist > 1.5;
+  if (moving) {
+    const sp = Math.min(dist, 160 * dt);
+    p.x += dx / dist * sp; p.y += dy / dist * sp;
+  }
+  p.bob += dt * (moving ? 9.5 : 2.5);
+  const bob = Math.sin(p.bob) * (moving ? 3.2 : 1.4);
+  p.blink -= dt; if (p.blink <= 0) p.blink = 2.4 + Math.random() * 2.6;
+  const eyeOpen = p.blink > 0.12;
+
+  const u = Math.max(13, Math.round(W / 86));
+  const x = Math.round(p.x), y = Math.round(p.y + bob);
+
+  ctx.globalAlpha = p.idle ? 0.55 : 1;
+  const px = (a, b, w, h) => ctx.fillRect(Math.round(x + a), Math.round(y + b), Math.ceil(w), Math.ceil(h));
+
+  // 그림자
+  ctx.fillStyle = 'rgba(0,0,0,.45)';
+  ctx.beginPath(); ctx.ellipse(x, y + u * 1.75, u * 0.95, u * 0.30, 0, 0, 6.3); ctx.fill();
+
+  // 선택 링
+  if (p.__sel) {
+    ctx.strokeStyle = 'rgba(255,211,61,0.95)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.ellipse(x, y + u * 1.75, u * 1.25, u * 0.42, 0, 0, 6.3); ctx.stroke();
+  }
+
+  // 픽셀 복장 & 스프라이트
+  const SKIN = '#f8d8b4', SKIN_S = '#dfb084', HAIR = '#241a12', HAIR_S = '#150f0b';
+  const tunic = p.zone === 'error' ? '#c8433a' : p.zone === 'waiting' ? '#e8b93c' : (p.tunic || '#1b7a82');
+  const tunicS = shade(tunic, -30);
+  const step = moving ? (Math.sin(p.bob * 1.0) > 0 ? 1 : -1) : 0;
+
+  // 다리 & 신발
+  ctx.fillStyle = '#2f343f';
+  px(-u * 0.52, u * 1.05 + (step > 0 ? u * 0.14 : 0), u * 0.42, u * 0.62);
+  px( u * 0.10, u * 1.05 + (step < 0 ? u * 0.14 : 0), u * 0.42, u * 0.62);
+  ctx.fillStyle = '#1c1f26';
+  px(-u * 0.56, u * 1.58 + (step > 0 ? u * 0.14 : 0), u * 0.50, u * 0.20);
+  px( u * 0.06, u * 1.58 + (step < 0 ? u * 0.14 : 0), u * 0.50, u * 0.20);
+
+  // 몸통
+  ctx.fillStyle = tunicS; px(-u * 0.72, u * 0.20, u * 1.44, u * 0.92);
+  ctx.fillStyle = tunic;  px(-u * 0.66, u * 0.16, u * 1.32, u * 0.80);
+  ctx.fillStyle = '#ffffff'; px(-u * 0.16, u * 0.16, u * 0.32, u * 0.34); // 옷깃
+  ctx.fillStyle = shade(tunic, -50); px(-u * 0.68, u * 0.84, u * 1.36, u * 0.18); // 허리띠
+
+  // 팔
+  const swing = moving ? step * u * 0.18 : (!moving ? Math.sin(p.bob * 3) * u * 0.12 : 0);
+  ctx.fillStyle = tunicS;
+  px(-u * 0.94, u * 0.26 - swing, u * 0.30, u * 0.62);
+  px( u * 0.64, u * 0.26 + swing, u * 0.30, u * 0.62);
+  ctx.fillStyle = SKIN;
+  px(-u * 0.94, u * 0.84 - swing, u * 0.30, u * 0.24);
+  px( u * 0.64, u * 0.84 + swing, u * 0.30, u * 0.24);
+
+  // 머리 & 헤어
+  ctx.fillStyle = SKIN_S; px(-u * 0.76, -u * 0.98, u * 1.52, u * 1.20);
+  ctx.fillStyle = SKIN;   px(-u * 0.70, -u * 1.02, u * 1.40, u * 1.16);
+  ctx.fillStyle = HAIR_S; px(-u * 0.80, -u * 1.16, u * 1.60, u * 0.46);
+  ctx.fillStyle = HAIR;   px(-u * 0.74, -u * 1.12, u * 1.48, u * 0.38);
+  px(-u * 0.80, -u * 0.90, u * 0.22, u * 0.62);
+  px( u * 0.58, -u * 0.90, u * 0.22, u * 0.62);
+  if (p.topknot) { ctx.fillStyle = HAIR; px(-u * 0.16, -u * 1.40, u * 0.32, u * 0.28); }
+
+  // 눈 & 볼터치
+  ctx.fillStyle = '#1a1410';
+  if (eyeOpen) {
+    const ex = p.face > 0 ? u * 0.04 : -u * 0.04;
+    px(-u * 0.40 + ex, -u * 0.62, u * 0.20, u * 0.26);
+    px( u * 0.20 + ex, -u * 0.62, u * 0.20, u * 0.26);
+  } else {
+    px(-u * 0.40, -u * 0.52, u * 0.20, u * 0.08);
+    px( u * 0.20, -u * 0.52, u * 0.20, u * 0.08);
+  }
+  ctx.fillStyle = 'rgba(230,120,100,.42)';
+  px(-u * 0.62, -u * 0.40, u * 0.20, u * 0.14);
+  px( u * 0.42, -u * 0.40, u * 0.20, u * 0.14);
+
+  // 상태 이펙트
+  if (p.zone === 'waiting') {
+    const s = Math.sin(performance.now() / 200) > 0 ? 1 : .3;
+    ctx.globalAlpha = s; ctx.fillStyle = '#ffd33d';
+    ctx.font = `900 ${u * 1.7}px sans-serif`; ctx.fillText('?', x + u * 1.2, y - u * 1.6);
+    ctx.globalAlpha = 1;
+  } else if (p.zone === 'research') {
+    ctx.strokeStyle = '#1fd9c0'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x + u * 1.35, y - u * 1.5, u * 0.42, 0, 6.3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + u * 1.65, y - u * 1.2); ctx.lineTo(x + u * 2.0, y - u * 0.85); ctx.stroke();
+  } else if (!moving && p.zone !== 'lounge') {
+    // 타이핑 애니메이션
+    const k = Math.floor(performance.now() / 280) % 4;
+    ctx.fillStyle = 'rgba(31,217,192,0.85)';
+    for (let i = 0; i < 3; i++) {
+      ctx.fillRect(x + u * 1.15 + i * u * 0.38, y + u * 0.25, u * 0.22, u * 0.22 * (i <= k ? 1 : 0.35));
+    }
+  }
+
+  if (p.idle) {
+    const zt = performance.now() / 650;
+    ctx.fillStyle = 'rgba(160,210,230,.75)';
+    ctx.font = `700 ${Math.round(u * 0.9)}px sans-serif`;
+    ctx.fillText('z', x + u * 0.9, y - u * 1.5 - Math.sin(zt) * u * 0.25);
+    ctx.font = `700 ${Math.round(u * 0.65)}px sans-serif`;
+    ctx.fillText('z', x + u * 1.5, y - u * 1.9 - Math.sin(zt + 1) * u * 0.25);
+  }
+
+  // 이름표
+  const fs = Math.max(10, Math.round(u * 0.95));
+  ctx.font = `700 ${fs}px "Pretendard", sans-serif`;
+  const label = p.name || '';
+  const tw = ctx.measureText(label).width;
+  const bw = tw + 14, bh = fs + 8;
+  let bx = x - bw / 2, by = y + u * 2.05;
+
+  for (let tries = 0; tries < 6; tries++) {
+    const hit = labelBoxes.some(b => bx < b.x + b.w + 3 && bx + bw + 3 > b.x && by < b.y + b.h + 2 && by + bh + 2 > b.y);
+    if (!hit) break;
+    by += bh + 3;
+  }
+  labelBoxes.push({ x: bx, y: by, w: bw, h: bh });
+
+  ctx.fillStyle = 'rgba(6,20,24,.92)';
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.strokeStyle = p.__sel ? '#ffd33d' : 'rgba(31,217,192,.55)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(bx, by, bw, bh);
+  ctx.fillStyle = '#e0f6f4'; ctx.textAlign = 'left';
+  ctx.fillText(label, bx + 7, by + fs + 1);
+}
+
+function shade(hex, d) {
+  const n = parseInt(hex.slice(1), 16);
+  const cl = v => Math.max(0, Math.min(255, v + d));
+  return '#' + [cl(n >> 16 & 255), cl(n >> 8 & 255), cl(n & 255)].map(v => v.toString(16).padStart(2, '0')).join('');
+}
+
+// ── 애니메이션 프레임 루프 ──
+let last = performance.now();
+
+function frame(now) {
+  const dt = Math.min(.05, (now - last) / 1000);
+  last = now;
+  drawOfficeFloor();
+  drawZoneDecorations();
+  labelBoxes = [];
+
+  for (const [id, pp] of people) pp.__sel = (id === selectedId);
+  const arr = [...people.values()].sort((a, b) => a.y - b.y);
+  drawAllFurniture();
+  for (const p of arr) drawPerson(p, dt);
+
+  // 타임코드
+  const t = Math.floor((now - T0) / 1000);
+  document.getElementById('tc').textContent =
+    [t / 3600 | 0, (t / 60 | 0) % 60, t % 60].map(n => String(n | 0).padStart(2, '0')).join(':');
+  document.getElementById('ticker').innerHTML = logLines.join('<br>');
+
+  requestAnimationFrame(frame);
+}
+resize();
+requestAnimationFrame(frame);
+
+// ── 상호작용 및 컨트롤 이벤트 ──
+document.getElementById('btnSimulate').onclick = async () => {
+  initAudio();
+  sfxChime();
+  await fetch('/simulate', { method: 'POST' });
+};
+
+document.getElementById('btnDemoDev').onclick = () => { initAudio(); fetch('/demo', { method: 'POST', body: JSON.stringify({ name: '개발팀장', zone: 'dev', tool: 'PRD', task: '아키텍처 검토' }) }); };
+document.getElementById('btnDemoMkt').onclick = () => { initAudio(); fetch('/demo', { method: 'POST', body: JSON.stringify({ name: '마케팅팀장', zone: 'marketing', tool: 'Story3-8', task: '전환 퍼널 설계' }) }); };
+document.getElementById('btnDemoMed').onclick = () => { initAudio(); fetch('/demo', { method: 'POST', body: JSON.stringify({ name: '미디어_사원A', zone: 'media', tool: 'CosyVoice', task: '듀얼 음성 생성' }) }); };
+
+const cctvModes = ['hi', 'lo', 'off'];
+let cctvIdx = 0;
+document.getElementById('btnCctv').onclick = () => {
+  cctvIdx = (cctvIdx + 1) % cctvModes.length;
+  document.body.dataset.cctv = cctvModes[cctvIdx];
+};
+
+document.getElementById('btnSound').onclick = () => {
+  initAudio();
+  soundEnabled = !soundEnabled;
+  document.getElementById('btnSound').textContent = soundEnabled ? '🔊 8-Bit 사운드' : '🔇 사운드 음소거';
+};
+
+addEventListener('keydown', e => {
+  if (e.key === 'c' || e.key === 'C') {
+    cctvIdx = (cctvIdx + 1) % cctvModes.length;
+    document.body.dataset.cctv = cctvModes[cctvIdx];
+  }
+  if (e.key === 'Escape') closeCard();
+});
+
+// ── 에이전트 상세 카드 ──
+let roles = {};
+fetch('/org', { cache: 'no-store' }).then(r => r.json()).then(o => {
+  for (const a of (o.agents || [])) roles[a.name] = a;
+}).catch(() => {});
+
+function closeCard() { selectedId = null; document.getElementById('card').hidden = true; }
+document.getElementById('cardX').onclick = closeCard;
+
+cv.addEventListener('click', e => {
+  initAudio();
+  const r = cv.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const u = Math.max(13, Math.round(W / 86));
+  let hit = null, best = 1e9;
+
+  for (const [id, p] of people) {
+    const dx = Math.abs(mx - p.x), dy = my - (p.y - u * 0.6);
+    if (dx < u * 1.3 && dy > -u * 1.3 && dy < u * 2.5) {
+      const d = dx + Math.abs(dy);
+      if (d < best) { best = d; hit = id; }
+    }
+  }
+
+  if (hit) {
+    selectedId = hit;
+    sfxEvent();
+    renderCard();
+  } else {
+    closeCard();
+  }
+});
+
+function renderCard() {
+  const p = people.get(selectedId);
+  if (!p) { closeCard(); return; }
+  const meta = roles[p.name] || {};
+  document.getElementById('card').hidden = false;
+  document.getElementById('cName').textContent = p.name;
+  document.getElementById('cRole').textContent = meta.description || p.role || '-';
+  document.getElementById('cDept').textContent = meta.department_name || meta.department || '가상기업';
+  document.getElementById('cNow').textContent = (p.task || p.tool || '대기 중') + (p.tool ? ` (${p.tool})` : '');
+  document.getElementById('cZone').textContent = (ZONES[p.zone] || {}).label || p.zone;
+  document.getElementById('cModel').textContent = meta.model || 'gemini-2.5-flash';
+  document.getElementById('cFile').textContent = meta.file || '-';
+}
+
+document.getElementById('btnSendDispatch').onclick = async () => {
+  const input = document.getElementById('dispatchInput');
+  const task = input.value.trim();
+  if (!task || !selectedId) return;
+  sfxChime();
+  await fetch('/dispatch', {
+    method: 'POST',
+    body: JSON.stringify({ name: selectedId, task: task })
+  });
+  input.value = '';
+};
+</script>
+</body>
+</html>

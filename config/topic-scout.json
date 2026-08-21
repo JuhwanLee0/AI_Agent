@@ -1,0 +1,49 @@
+{
+  "$schema_version": 2,
+  "unit_budget": 30,
+  "dedup_threshold": 0.8,
+  "self_channel_id": "",
+  "ref_channels": [],
+  "counter_examples": [],
+  "evergreen_keywords": [],
+  "signals": {
+    "packaging_min_video_views": 400000
+  },
+  "outlier": {
+    "scan_depth": 30,
+    "min_baseline_sample": 10,
+    "outlier_ratio_min": 2.5,
+    "outlier_strength_min": 8.0,
+    "cross_channel_min": 2,
+    "recency_days": 45,
+    "freshness_days": 14,
+    "cluster_threshold": 0.3
+  },
+  "portfolio": {
+    "formats": [
+      {
+        "name": "설명형",
+        "keywords": ["방법", "정리", "기초", "원리", "구조", "가이드"]
+      },
+      {
+        "name": "사례해부형",
+        "keywords": ["폭로", "반전", "몰락", "사례", "비밀", "실패", "성공"]
+      },
+      {
+        "name": "비교형",
+        "keywords": ["비교", "차이", "vs", "대결", "선택"]
+      }
+    ]
+  },
+  "policy": {
+    "inauthentic_veto": [],
+    "kr_defamation_veto": ["사기꾼", "범죄자", "횡령범"],
+    "tragedy_adjacency_veto": ["참사", "사망 사고", "압사", "유가족", "분향소"]
+  },
+  "_threshold_rationale": {
+    "outlier_ratio_min": "2.5배는 업계 아웃라이어 진입선 구간(vidIQ 2배, OutlierKit 3배) 안입니다.",
+    "outlier_strength_min": "8.0배는 바이럴 후보(5배)와 매우 높음(10배) 사이입니다.",
+    "min_baseline_sample": "표본 10개는 ViewStats가 직전 10개 업로드 평균을 기준선으로 쓰는 방식과 같은 계열입니다.",
+    "note": "이 값들이 절대적으로 검증된 것은 아니며 업계 구간 안이라는 뜻입니다. 니치에 맞게 캘리브레이션이 필요합니다."
+  }
+}

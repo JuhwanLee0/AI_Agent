@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "type": "command",
+        "command": "python \"/Users/lee/Desktop/00_나/02_취미/05_전공/01_Programming/10_AI AGENT/.claude/skills/pixel-office/scripts/hook_push.py\" PreToolUse"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "type": "command",
+        "command": "python \"/Users/lee/Desktop/00_나/02_취미/05_전공/01_Programming/10_AI AGENT/.claude/skills/pixel-office/scripts/hook_push.py\" PostToolUse"
+      }
+    ],
+    "SubagentStart": [
+      {
+        "type": "command",
+        "command": "python \"/Users/lee/Desktop/00_나/02_취미/05_전공/01_Programming/10_AI AGENT/.claude/skills/pixel-office/scripts/hook_push.py\" SubagentStart"
+      }
+    ],
+    "SubagentStop": [
+      {
+        "type": "command",
+        "command": "python \"/Users/lee/Desktop/00_나/02_취미/05_전공/01_Programming/10_AI AGENT/.claude/skills/pixel-office/scripts/hook_push.py\" SubagentStop"
+      }
+    ]
+  }
+}

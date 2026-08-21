@@ -1,0 +1,12 @@
+{
+  "threads": [
+    "08:30",
+    "18:30"
+  ],
+  "youtube": [
+    "20:00"
+  ],
+  "buffer_min_count": 2,
+  "auto_refill_enabled": true,
+  "last_updated": "2026-08-20 20:50:00"
+}

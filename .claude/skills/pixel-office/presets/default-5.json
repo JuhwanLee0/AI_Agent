@@ -1,0 +1,7 @@
+[
+  { "name": "researcher",  "description": "자료를 찾아 근거와 함께 정리한다",        "zone": "research", "source": "preset", "sprite": "cat_orange", "seat": 0 },
+  { "name": "writer",      "description": "초안을 쓰고 문장을 다듬는다",              "zone": "desk",     "source": "preset", "sprite": "cat_grey",   "seat": 1 },
+  { "name": "reviewer",    "description": "결과를 검수하고 통과 여부를 판단한다",      "zone": "meeting",  "source": "preset", "sprite": "cat_black",  "seat": 2 },
+  { "name": "operator",    "description": "파일을 정리하고 배포를 실행한다",           "zone": "server",   "source": "preset", "sprite": "cat_white",  "seat": 3 },
+  { "name": "planner",     "description": "할 일을 쪼개고 순서를 정한다",             "zone": "desk",     "source": "preset", "sprite": "cat_calico", "seat": 4 }
+]
