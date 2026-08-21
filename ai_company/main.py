@@ -20,19 +20,26 @@ from ai_company.tools.threads_api import ThreadsApiTool
 from ai_company.tools.playwright_browser import PlaywrightBrowser
 from scripts.sns.scheduler_daemon import ScheduleManager
 
-load_dotenv()
+# 프로젝트 루트 .env 명시적 로드
+load_dotenv(dotenv_path=PROJECT_ROOT / ".env", override=True)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("AICompanyApp")
 
 # Slack App 초기화
-SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
-SLACK_APP_TOKEN = os.getenv("SLACK_APP_TOKEN")
+SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "").strip()
+SLACK_APP_TOKEN = os.getenv("SLACK_APP_TOKEN", "").strip()
+ADMIN_USERS = [u.strip() for u in os.getenv("SLACK_ADMIN_USERS", "").split(",") if u.strip()]
 
-if not SLACK_BOT_TOKEN or not SLACK_APP_TOKEN:
-    logger.warning("SLACK_BOT_TOKEN 또는 SLACK_APP_TOKEN이 .env에 설정되지 않았습니다.")
+is_slack_configured = bool(SLACK_BOT_TOKEN and SLACK_APP_TOKEN and SLACK_BOT_TOKEN.startswith("xoxb-"))
+if not is_slack_configured:
+    logger.warning("SLACK_BOT_TOKEN 또는 SLACK_APP_TOKEN이 올바르게 설정되지 않았습니다. .env의 토큰을 확인해 주세요.")
 
-app = App(token=SLACK_BOT_TOKEN)
+try:
+    app = App(token=SLACK_BOT_TOKEN or "xoxb-placeholder-token", token_verification_enabled=is_slack_configured)
+except Exception as e:
+    logger.warning(f"Slack App init warning (auth test skipped): {e}")
+    app = App(token=SLACK_BOT_TOKEN or "xoxb-placeholder-token", token_verification_enabled=False)
 orchestrator = CompanyOrchestrator()
 threads_tool = ThreadsApiTool()
 browser_tool = PlaywrightBrowser()
@@ -54,6 +61,9 @@ def post_as_agent(channel: str, agent_name: str, text: str, thread_ts: str = Non
     if not channel:
         logger.warning(f"No target channel provided for agent message ({agent_name})")
         return
+    if not is_slack_configured:
+        logger.debug(f"Slack not configured, logging output for {agent_name}: {text[:60]}...")
+        return
 
     config = AGENTS.get(agent_name)
     username = f"{agent_name} ({config.role})" if config else agent_name
@@ -73,11 +83,52 @@ def post_as_agent(channel: str, agent_name: str, text: str, thread_ts: str = Non
 
         app.client.chat_postMessage(**kwargs)
     except Exception as e:
+        err_msg = str(e)
+        if "not_in_channel" in err_msg:
+            try:
+                app.client.conversations_join(channel=channel)
+                app.client.chat_postMessage(**kwargs)
+                return
+            except Exception as e2:
+                logger.error(f"Auto-join failed for {channel}: {e2}")
         logger.error(f"Failed to post message as {agent_name}: {e}")
+
+def get_target_channel(agent_name: str, fallback_channel: str) -> str:
+    """에이전트의 소속 부서에 맞는 전용 채널 반환"""
+    config = AGENTS.get(agent_name)
+    if not config:
+        return fallback_channel
+
+    if config.department == "dev":
+        return CHANNEL_MAP.get("dev") or fallback_channel
+    elif config.department in ("marketing", "media"):
+        return CHANNEL_MAP.get("marketing") or fallback_channel
+    elif agent_name == "CEO":
+        return CHANNEL_MAP.get("hq") or fallback_channel
+    return fallback_channel
+
+# 기본 부서별 릴레이 순서 (에이전트가 후속 태그를 누락했을 때 자동 체인 연결)
+AUTO_RELAY_CHAINS = {
+    "CEO": "개발팀장",
+    "개발팀장": "개발_사원A",
+    "개발_사원A": "개발_사원B",
+    "개발_사원B": "개발_사원C",
+    "개발_사원C": "개발_사원D",
+    "개발_사원D": "개발_사원E",
+    "개발_사원E": "개발팀장",
+    "마케팅팀장": "마케팅_사원A",
+    "마케팅_사원A": "마케팅_사원B",
+    "마케팅_사원B": "마케팅_사원C",
+    "마케팅_사원C": "마케팅_사원D",
+    "미디어팀장": "미디어_사원A",
+    "미디어_사원A": "미디어_사원B",
+    "미디어_사원B": "미디어_사원C",
+    "미디어_사원C": "미디어_사원D",
+}
 
 def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: str):
     """
-    위계형 다중 에이전트 협업 파이프라인 실행 (instruction.md 태그 인수인계 준수)
+    위계형 다중 에이전트 협업 파이프라인 실행 (부서 전용 채널 라우팅 및 끊김 없는 인수인계 보장)
     """
     # 긴급 즉시 스레드 요청 키워드 탐지
     if any(k in user_prompt for k in ["즉시 스레드", "스레드 하나 줘", "예비 스레드", "긴급 발행"]):
@@ -114,32 +165,71 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
             post_as_agent(channel, "마케팅팀장", "즉시 발행 요청 콘텐츠가 준비되었습니다.", thread_ts=thread_ts, blocks=blocks)
             return
 
+    import datetime
+    # 프로젝트 고유 폴더 생성 (output/YYYYMMDD_작업명/)
+    date_str = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+    safe_slug = re.sub(r'[^a-zA-Z0-9가-힣]+', '_', user_prompt[:25]).strip('_') or "project"
+    project_folder_name = f"{date_str}_{safe_slug}"
+    project_output_dir = PROJECT_ROOT / "output" / project_folder_name
+    
+    # 하위 에셋 디렉토리 생성
+    (project_output_dir / "audio").mkdir(parents=True, exist_ok=True)
+    (project_output_dir / "images").mkdir(parents=True, exist_ok=True)
+    (project_output_dir / "docs").mkdir(parents=True, exist_ok=True)
+
     current_agent = initial_agent
     current_message = user_prompt
-    history = [{"role": "user", "content": user_prompt}]
-    max_hops = 10
+    
+    # 프롬프트에 활성 프로젝트 격리 출력 경로 컨텍스트 주입
+    context_header = f"[📁 활성 프로젝트 산출물 격리 경로: output/{project_folder_name}]\n(모든 기획서, DESIGN.md, 대본, 이미지, 코드는 반드시 위 폴더 및 projects/ 디렉토리에 생성하십시오)\n\n"
+    history = [{"role": "user", "content": context_header + user_prompt}]
+    max_hops = 12
     hop = 0
+    visited_agents = []
 
     orchestrator.tracker.state["current_project"] = user_prompt[:40] + "..."
+    orchestrator.tracker.state["current_project_dir"] = f"output/{project_folder_name}"
     orchestrator.tracker.save()
 
     while current_agent and hop < max_hops:
         hop += 1
+        visited_agents.append(current_agent)
         logger.info(f"Step {hop}: Running Agent -> {current_agent}")
         
+        # 대상 부서 채널 결정
+        target_channel = get_target_channel(current_agent, channel)
+        
+        # 채널이 분기될 때 원래 채널에 안내 알림 (1회성)
+        if target_channel != channel and hop == 2:
+            post_as_agent(
+                channel, 
+                "CEO", 
+                f"🚀 *[부서 실무 릴레이 가동]* `{current_agent}`에게 프로젝트가 이관되었습니다. 세부 진행 및 개발 토론은 <#{target_channel}> 채널에서 실시간으로 진행됩니다.",
+                thread_ts
+            )
+
         # 상태 업데이트 (진행중)
         orchestrator.tracker.update_agent(
             agent_name=current_agent,
             status="진행중",
             task=current_message[:50] + "...",
-            progress=int((hop / 6) * 100) if hop <= 6 else 95
+            progress=int((hop / 8) * 100) if hop <= 8 else 95
         )
 
-        # LLM 호출 및 도구 실행
-        response = orchestrator.call_agent_llm(current_agent, history)
+        try:
+            # LLM 호출 및 도구 실행
+            response = orchestrator.call_agent_llm(current_agent, history)
+        except Exception as e:
+            logger.error(f"Pipeline LLM call failed for {current_agent}: {e}")
+            orchestrator.tracker.update_agent(
+                agent_name=current_agent,
+                status="실패",
+                task=f"LLM 호출 실패: {str(e)[:40]}"
+            )
+            break
         
-        # 슬랙에 에이전트 페르소나로 회신
-        post_as_agent(channel, current_agent, response, thread_ts)
+        # 해당 부서 전용 채널(또는 요청 채널)에 에이전트 페르소나로 회신
+        post_as_agent(target_channel, current_agent, response, thread_ts if target_channel == channel else None)
 
         # 상태 업데이트 (완료)
         orchestrator.tracker.update_agent(
@@ -151,19 +241,57 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
         # 대화 히스토리 누적
         history.append({"role": "assistant", "content": f"[{current_agent}]: {response}"})
 
-        # 다음 에이전트 태그 탐지 (@다음에이전트)
-        next_agent = orchestrator.parse_next_agent(response)
-        if next_agent and next_agent != current_agent:
+        # 다음 에이전트 태그 탐지 (@다음에이전트) — current_agent 자기 자신 제외
+        next_agent = orchestrator.parse_next_agent(response, current_agent)
+        
+        # 태그가 없거나 이미 거친 에이전트가 아니면 자동 체인 폴백
+        if not next_agent and current_agent in AUTO_RELAY_CHAINS:
+            candidate = AUTO_RELAY_CHAINS[current_agent]
+            if candidate not in visited_agents or (candidate == "개발팀장" and len(visited_agents) >= 5):
+                next_agent = candidate
+                logger.info(f"Auto-relaying from {current_agent} to {next_agent}")
+
+        if next_agent:
+            if next_agent in visited_agents and next_agent != "개발팀장":
+                logger.info(f"Loop prevention: {next_agent} already visited. Stopping pipeline.")
+                break
             current_agent = next_agent
             current_message = response
-            time.sleep(1) # 부드러운 스레드 연결을 위한 짧은 대기
+            time.sleep(1.5) # 부드러운 스레드 연결을 위한 대기
         else:
             logger.info("Pipeline completed or no further agent tagged.")
             break
 
+    # 최종 완료 보고 — 5대 채널 크로스 알림
     orchestrator.tracker.state["progress_percent"] = 100
     orchestrator.tracker.state["active_agent"] = "None"
     orchestrator.tracker.save()
+
+    relay_path = " → ".join(visited_agents)
+    summary_text = user_prompt[:50] + ("..." if len(user_prompt) > 50 else "")
+
+    # 1. #hq-board: CEO 최종 완료 보고 (원본 스레드에)
+    if len(visited_agents) > 2:
+        post_as_agent(
+            channel, "CEO",
+            f"✅ *[프로젝트 완료]* `{summary_text}`\n"
+            f"릴레이: {relay_path}\n"
+            f"📁 산출물: `{project_output_dir}`",
+            thread_ts
+        )
+
+    # 2. #ceo-briefing: CEO 일일 보고
+    ceo_chan = CHANNEL_MAP.get("ceo_report")
+    if ceo_chan:
+        post_as_agent(ceo_chan, "CEO",
+            f"📋 *[프로젝트 브리핑]* {summary_text} 완료 ({len(visited_agents)} agents)")
+
+    # 3. #output-review: 검수 요청
+    review_chan = CHANNEL_MAP.get("output_review")
+    if review_chan and len(visited_agents) > 2:
+        post_as_agent(review_chan, "개발팀장",
+            f"🔍 *[검수 요청]* `{summary_text}` 산출물 리뷰 요청\n"
+            f"📁 경로: `{project_output_dir}`")
 
 
 @app.event("app_mention")
@@ -387,8 +515,17 @@ def handle_threads_command(ack, respond, command):
 @app.command("/update")
 @app.command("/ai-update")
 def handle_update_command(ack, respond, command):
-    """GCP 서버에서 git pull origin main 실행 후 백그라운드 자동 재시작"""
+    """GCP 서버에서 git pull origin main 실행 후 백그라운드 자동 재시작 (관리자 권한 검증)"""
     ack()
+    user_id = command.get("user_id", "")
+    user_name = command.get("user_name", "")
+
+    # 관리자 화이트리스트가 설정되어 있는 경우 검증
+    if ADMIN_USERS and user_id not in ADMIN_USERS and user_name not in ADMIN_USERS:
+        logger.warning(f"Unauthorized update attempt by user: {user_name} ({user_id})")
+        respond("⛔ 서버 업데이트 및 재부팅 권한이 없습니다. (관리자 승인 필요)")
+        return
+
     respond("🔄 *[서버 자동 업데이트 시작]* GitHub에서 최신 코드를 내려받고 프로세스를 안전하게 재부팅합니다...")
     
     def _do_update():
@@ -449,8 +586,9 @@ def handle_reject_threads(ack, body, respond):
 
 def start_local_dashboard_server(port: int = 8080):
     """초경량 로컬 웹 대시보드 서버"""
-    os.chdir(str(PROJECT_ROOT / "ai_company"))
-    handler = SimpleHTTPRequestHandler
+    import functools
+    serve_dir = str(PROJECT_ROOT / "ai_company")
+    handler = functools.partial(SimpleHTTPRequestHandler, directory=serve_dir)
     try:
         httpd = HTTPServer(("0.0.0.0", port), handler)
         logger.info(f"Local Dashboard running at http://localhost:{port}/web/")

@@ -36,11 +36,11 @@ def run_self_update():
     except Exception:
         latest_commit = "최신 커밋 정보 확인 불가"
 
-    # 3. 백그라운드 재부팅 스크립트 비동기 실행
     restart_script = f"""
 sleep 1
-pkill -f main.py
-cd {PROJECT_ROOT}
+pkill -f "ai_company.main" || true
+pkill -f "main.py" || true
+cd "{PROJECT_ROOT}"
 nohup python3 -u main.py > agent.log 2>&1 &
 """
     subprocess.Popen(["bash", "-c", restart_script], start_new_session=True)

@@ -1,7 +1,9 @@
 import os
 import re
 import json
+import time
 import logging
+import threading
 import subprocess
 from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
@@ -90,6 +92,7 @@ class ClaudeMemManager:
     """
     def __init__(self, memory_file: str = os.path.join(MEMORY_DIR, "agent_memory.json")):
         self.memory_file = memory_file
+        self._io_lock = threading.Lock()
         self.local_memories: Dict[str, List[Dict[str, str]]] = self._load_local_memory()
 
     def _load_local_memory(self) -> Dict[str, List[Dict[str, str]]]:
@@ -102,11 +105,12 @@ class ClaudeMemManager:
         return {"global": [], "CEO": [], "dev": [], "marketing": [], "media": [], "business": []}
 
     def _save_local_memory(self):
-        try:
-            with open(self.memory_file, "w", encoding="utf-8") as f:
-                json.dump(self.local_memories, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.error(f"Error saving local memory: {e}")
+        with self._io_lock:
+            try:
+                with open(self.memory_file, "w", encoding="utf-8") as f:
+                    json.dump(self.local_memories, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                logger.error(f"Error saving local memory: {e}")
 
     def query_claude_mem(self, query: str) -> str:
         """claude-mem CLI를 통한 세션 메모리 검색"""
@@ -380,7 +384,7 @@ class AgentConfig:
         instruction_file: str,
         api_key_env: str,
         model_env: str = "MODEL_MANAGER",
-        default_model: str = "gemini-3.6-flash",
+        default_model: str = "gemini-2.5-flash",
         avatar_name: str = "robot"
     ):
         self.name = name
@@ -409,17 +413,17 @@ class AgentConfig:
     @property
     def model_name(self) -> str:
         raw = os.getenv(self.model_env, self.default_model).strip().lower()
-        if raw in ("3.5-lite", "3.5 lite", "3.5_lite", "lite", "gemini-3.5-lite", "gemini-2.0-flash-lite", "flash-lite"):
-            return "gemini-2.0-flash-lite"
-        elif raw in ("3.6", "3.6 flash", "3.6-flash", "3.7", "3.7 flash", "gemini-3.6", "gemini-3.6-flash", "gemini-2.5-flash"):
+        if raw in ("3.5-lite", "3.5 lite", "3.5_lite", "lite", "gemini-3.5-lite", "gemini-2.0-flash-lite", "flash-lite", "2.0-flash-lite"):
+            return "gemini-3.6-flash"
+        elif raw in ("3.6", "3.6 flash", "3.6-flash", "3.7", "3.7 flash", "gemini-3.6", "gemini-3.6-flash", "gemini-2.5-flash", "2.5-flash", "flash", "gemini-2.0-flash", "2.0-flash"):
             return "gemini-3.6-flash"
         elif raw in ("3.5", "3.5 flash", "3.5-flash", "gemini-3.5", "gemini-3.5-flash"):
-            return "gemini-2.0-flash"
-        return raw
+            return "gemini-3.6-flash"
+        return raw or "gemini-3.6-flash"
 
 
 AGENTS: Dict[str, AgentConfig] = {
-    # 경영진 (CEO: gemini-3.6-flash 통일)
+    # 경영진 (CEO)
     "CEO": AgentConfig("CEO", "최고경영자", "executive", "ceo_instruction.md", "GEMINI_API_KEY_CEO", "MODEL_CEO", "gemini-3.6-flash", "briefcase"),
     
     # 개발본부 (개발사원은 팀장과 동일한 Key 2 및 MODEL_MANAGER 적용)
@@ -451,6 +455,8 @@ AGENTS: Dict[str, AgentConfig] = {
 # 7. Status Tracking
 # ----------------------------------------------------
 class StatusTracker:
+    _io_lock = threading.Lock()
+
     def __init__(self, filepath: str = STATUS_FILE):
         self.filepath = filepath
         self.state: Dict[str, Any] = {
@@ -472,11 +478,12 @@ class StatusTracker:
                 logger.error(f"Error loading status file: {e}")
 
     def save(self):
-        try:
-            with open(self.filepath, "w", encoding="utf-8") as f:
-                json.dump(self.state, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.error(f"Error saving status file: {e}")
+        with self._io_lock:
+            try:
+                with open(self.filepath, "w", encoding="utf-8") as f:
+                    json.dump(self.state, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                logger.error(f"Error saving status file: {e}")
 
     def update_agent(self, agent_name: str, status: str, task: str, progress: Optional[int] = None):
         import datetime
@@ -631,13 +638,21 @@ class CompanyOrchestrator:
         return optimized_prompt.strip()
 
     AGENT_SKILL_MAPPING: Dict[str, List[str]] = {
+        # 경영진 & 비즈니스
+        "CEO": ["executive_governance.md", "kpi_dashboard.md"],
         # 개발본부 특화 스킬 매핑
-        "개발팀장": ["team_lead_skills.md", "vibe_coding_security_checklist.md", "ui_ux_design_system.md"],
+        "개발팀장": ["team_lead_skills.md", "vibe_coding_security_checklist.md", "ui_ux_design_system.md", "design_system.md"],
         "개발_사원A": ["architect_skills.md", "vibe_coding_security_checklist.md"],
         "개발_사원B": ["backend_skills.md", "vibe_coding_security_checklist.md"],
-        "개발_사원C": ["frontend_skills.md", "ui_ux_design_system.md"],
+        "개발_사원C": ["frontend_skills.md", "ui_ux_design_system.md", "ui_styling.md", "banner_design.md", "design_system.md"],
         "개발_사원D": ["qa_security_skills.md", "vibe_coding_security_checklist.md", "ui_ux_design_system.md"],
         "개발_사원E": ["devops_infra_skills.md", "vibe_coding_security_checklist.md"],
+        # 마케팅본부 특화 스킬 매핑
+        "마케팅팀장": ["marketing_psychology.md", "sns_viral_formula.md", "copywriting_mastery.md"],
+        "마케팅_사원A": ["marketing_psychology.md", "sns_viral_formula.md"],
+        "마케팅_사원B": ["copywriting_mastery.md", "sns_viral_formula.md"],
+        "마케팅_사원C": ["copywriting_mastery.md", "marketing_psychology.md"],
+        "마케팅_사원D": ["sns_viral_formula.md", "banner_design.md"],
     }
 
     def _load_skills(self, department: str, agent_name: str) -> str:
@@ -668,63 +683,112 @@ class CompanyOrchestrator:
             return ""
         return "## [적용 가능한 스킬 목록]\n" + "\n\n".join(skills)
 
-    def parse_next_agent(self, response_text: str) -> Optional[str]:
+    def parse_next_agent(self, response_text: str, current_agent: str = "") -> Optional[str]:
+        """발화자(current_agent) 제외, 한국어 호환 @태그 탐지"""
         for agent_name in AGENTS.keys():
-            pattern = rf"@{re.escape(agent_name)}\b"
+            if agent_name == current_agent:
+                continue
+            # \b 한국어 실패 대비: @이름 뒤에 공백/구두점/줄바꿈/문장끝
+            pattern = rf"@{re.escape(agent_name)}(?=[\s,.\n!?:;]|$)"
             if re.search(pattern, response_text):
                 return agent_name
         return None
+
+    def get_candidate_keys(self, agent_name: str) -> List[str]:
+        """주요 키 및 폴백 키 목록 추출 (중복 제거)"""
+        config = AGENTS.get(agent_name)
+        primary_key = config.api_key if config else ""
+        candidates = [primary_key] if primary_key else []
+        for env_var in ["GEMINI_API_KEY_1", "GEMINI_API_KEY_2", "GEMINI_API_KEY_3", "GEMINI_API_KEY", "GOOGLE_API_KEY"]:
+            val = os.getenv(env_var, "").strip()
+            if val and val not in candidates:
+                candidates.append(val)
+        return candidates
 
     def call_agent_llm(self, agent_name: str, conversation_history: List[Dict[str, str]]) -> str:
         config = AGENTS.get(agent_name)
         if not config:
             return f"Error: Agent '{agent_name}' not found."
 
-        api_key = config.api_key
-        if not api_key:
+        candidate_keys = self.get_candidate_keys(agent_name)
+        if not candidate_keys:
             return f"Error: API Key for '{agent_name}' is not configured in .env."
 
         system_prompt = self.load_system_prompt(agent_name)
-        model_name = config.model_name
+        primary_model = config.model_name
+
+        # 폴백 모델 목록 (gemini-3.6-flash 우선)
+        fallback_models = [primary_model, "gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash"]
+        models_to_try = []
+        for m in fallback_models:
+            if m and m not in models_to_try:
+                models_to_try.append(m)
 
         try:
             # 1. Headroom-AI 대화 기록 최적화
             optimized_history = self.headroom.optimize_messages(conversation_history)
             formatted_history = "\n".join([f"[{t.get('role')}]: {t.get('content')}" for t in optimized_history])
 
-            try:
-                from google import genai
-                client = genai.Client(api_key=api_key)
-                prompt = f"{system_prompt}\n\n[대화 기록 및 업무 지시]\n{formatted_history}"
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt
-                )
-                output_text = response.text
-            except ImportError:
-                import google.generativeai as legacy_genai
-                legacy_genai.configure(api_key=api_key)
-                model = legacy_genai.GenerativeModel(model_name=model_name, system_instruction=system_prompt)
-                response = model.generate_content(formatted_history)
-                output_text = response.text
+            def _call_llm_with_fallback(prompt_text: str) -> str:
+                last_error = None
+                for model_candidate in models_to_try:
+                    for key_idx, key_candidate in enumerate(candidate_keys):
+                        try:
+                            try:
+                                from google import genai
+                                client = genai.Client(api_key=key_candidate)
+                                response = client.models.generate_content(
+                                    model=model_candidate,
+                                    contents=prompt_text
+                                )
+                                if response and response.text:
+                                    return response.text
+                            except ImportError:
+                                import google.generativeai as legacy_genai
+                                legacy_genai.configure(api_key=key_candidate)
+                                model = legacy_genai.GenerativeModel(model_name=model_candidate, system_instruction=system_prompt)
+                                response = model.generate_content(prompt_text)
+                                if response and response.text:
+                                    return response.text
+                        except Exception as err:
+                            err_msg = str(err)
+                            last_error = err
+                            is_quota_or_rate = "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg or "quota" in err_msg.lower() or "rate" in err_msg.lower()
+                            if is_quota_or_rate:
+                                logger.warning(f"[Quota Shield] 429 Rate/Quota on model '{model_candidate}' with key #{key_idx + 1}. Auto-switching fallback...")
+                                time.sleep(1.0)
+                                continue
+                            else:
+                                logger.error(f"LLM call exception ({model_candidate}): {err}")
+                                continue
 
-            # 2. Claude-Mem: 중요 결정사항 자동 기록
+                raise last_error or Exception("All LLM keys and fallback models exhausted.")
+
+            # 초기 LLM 호출
+            prompt = f"{system_prompt}\n\n[대화 기록 및 업무 지시]\n{formatted_history}"
+            output_text = _call_llm_with_fallback(prompt)
+
+            # 2. Tool 실행 루프: 도구 결과를 LLM에 재전달 (최대 3회)
+            for _tool_iter in range(3):
+                tool_output = self.parse_and_run_tools(output_text)
+                if not tool_output:
+                    break
+                # 도구 결과를 포함하여 LLM 재호출
+                tool_prompt = f"{prompt}\n\n[이전 응답]\n{output_text}\n\n[도구 실행 결과]\n{tool_output}\n\n위 도구 실행 결과를 바탕으로 답변을 완성해 주세요."
+                output_text = _call_llm_with_fallback(tool_prompt)
+
+            # 3. Claude-Mem: 중요 결정사항 자동 기록
             if "결과 요약" in output_text or "완료" in output_text or "인수인계" in output_text:
                 summary_snippet = output_text[:200].replace("\n", " ")
                 self.claude_mem.record_decision(config.department, agent_name, summary_snippet)
 
-            # 3. GSD & Graphify 상태 동기화
+            # 4. GSD & Graphify 상태 동기화
             if "페이즈" in output_text or "Phase" in output_text or "마일스톤" in output_text:
                 self.gsd.update_phase_state(
                     active_phase=self.tracker.state.get("active_phase", "Phase 1: Core Automation Pipeline"),
                     phase_status="In-Progress",
                     decision=f"{agent_name} 작업 이관 완료"
                 )
-
-            # 4. 도구 호출(Tool Tag) 탐지 및 자동 실행
-            tool_output = self.parse_and_run_tools(output_text)
-            if tool_output:
-                output_text += f"\n\n🛠️ *[도구 실행 결과]*\n{tool_output}"
 
             return output_text
         except Exception as e:
@@ -738,7 +802,10 @@ class CompanyOrchestrator:
         logger.info(f"[Orchestrator] Executing tool '{tool_name}' with args: {kwargs}")
         
         if tool_name in ("playwright_browse", "browse_url", "web_fetch"):
-            from tools.playwright_browser import PlaywrightBrowser
+            try:
+                from ai_company.tools.playwright_browser import PlaywrightBrowser
+            except ImportError:
+                from tools.playwright_browser import PlaywrightBrowser
             url = kwargs.get("url", "")
             if not url:
                 return {"success": False, "error": "URL이 지정되지 않았습니다."}
@@ -746,20 +813,58 @@ class CompanyOrchestrator:
             return browser.fetch_page_text(url)
 
         elif tool_name in ("playwright_screenshot", "screenshot"):
-            from tools.playwright_browser import PlaywrightBrowser
+            try:
+                from ai_company.tools.playwright_browser import PlaywrightBrowser
+            except ImportError:
+                from tools.playwright_browser import PlaywrightBrowser
             url = kwargs.get("url", "")
-            out_path = kwargs.get("output_path", "output/screenshot.png")
+            base_dir = self.tracker.state.get("current_project_dir", "output")
+            default_path = os.path.join(base_dir, "images", "screenshot.png")
+            out_path = kwargs.get("output_path", default_path)
             browser = PlaywrightBrowser()
             return browser.take_screenshot(url, output_path=out_path)
 
         elif tool_name in ("playwright_search", "web_search"):
-            from tools.playwright_browser import PlaywrightBrowser
+            try:
+                from ai_company.tools.playwright_browser import PlaywrightBrowser
+            except ImportError:
+                from tools.playwright_browser import PlaywrightBrowser
             query = kwargs.get("query", "")
             browser = PlaywrightBrowser()
             return {"results": browser.search_duckduckgo(query)}
 
+        elif tool_name in ("tts_generate", "auto_tts"):
+            try:
+                from ai_company.tools.auto_tts import process_script
+            except ImportError:
+                from tools.auto_tts import process_script
+            script_path = kwargs.get("script_path", "")
+            base_dir = self.tracker.state.get("current_project_dir", "output")
+            out_wav = kwargs.get("output_wav", os.path.join(base_dir, "audio", "narration.wav"))
+            if not os.path.exists(script_path):
+                return {"success": False, "error": f"대본 파일 없음: {script_path}"}
+            process_script(script_path, out_wav)
+            return {"success": True, "output_wav": out_wav}
+
+        elif tool_name in ("video_render", "render_video"):
+            try:
+                from ai_company.tools.video_compositor import render_video
+            except ImportError:
+                from tools.video_compositor import render_video
+            base_dir = self.tracker.state.get("current_project_dir", "output")
+            audio = kwargs.get("audio", os.path.join(base_dir, "audio", "narration.wav"))
+            images = kwargs.get("images", os.path.join(base_dir, "images"))
+            script = kwargs.get("script", os.path.join(base_dir, "script.txt"))
+            output_mp4 = kwargs.get("output", os.path.join(base_dir, "final_video.mp4"))
+            ratio = kwargs.get("ratio", "16:9")
+            success = render_video(audio, images, script, output_mp4, ratio)
+            return {"success": success, "output_mp4": output_mp4}
+
         elif tool_name in ("threads_publish", "threads_post"):
-            from tools.threads_api import ThreadsApiTool
+            try:
+                from ai_company.tools.threads_api import ThreadsApiTool
+            except ImportError:
+                from tools.threads_api import ThreadsApiTool
             text = kwargs.get("text", "")
             img = kwargs.get("image_url")
             threads = ThreadsApiTool()
@@ -769,6 +874,56 @@ class CompanyOrchestrator:
 
         elif tool_name == "status_summary":
             return {"summary": self.tracker.get_summary()}
+
+        # --- 개발용 도구 4종 (Ponytail: stdlib only) ---
+        elif tool_name == "write_file":
+            path, content = kwargs.get("path", ""), kwargs.get("content", "")
+            project_root = os.path.dirname(BASE_DIR)  # ai_company의 부모
+            abs_path = os.path.normpath(os.path.join(project_root, path))
+            if not abs_path.startswith(project_root):
+                return {"success": False, "error": "경로 탈출 금지"}
+            os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+            with open(abs_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            return {"success": True, "path": path}
+
+        elif tool_name == "read_file":
+            path = kwargs.get("path", "")
+            project_root = os.path.dirname(BASE_DIR)
+            abs_path = os.path.normpath(os.path.join(project_root, path))
+            if not os.path.exists(abs_path):
+                return {"success": False, "error": f"파일 없음: {path}"}
+            with open(abs_path, "r", encoding="utf-8") as f:
+                return {"success": True, "content": f.read()[:5000]}
+
+        elif tool_name == "list_files":
+            path = kwargs.get("path", ".")
+            project_root = os.path.dirname(BASE_DIR)
+            abs_path = os.path.normpath(os.path.join(project_root, path))
+            files = []
+            skip = {".git", "__pycache__", "node_modules", ".venv"}
+            for root, dirs, fnames in os.walk(abs_path):
+                dirs[:] = [d for d in dirs if d not in skip]
+                for fn in fnames:
+                    files.append(os.path.relpath(os.path.join(root, fn), abs_path))
+                if len(files) > 100:
+                    break
+            return {"success": True, "files": files[:100]}
+
+        elif tool_name == "run_command":
+            cmd = kwargs.get("command", "")
+            blocked = ["rm -rf", "sudo", "mkfs", "dd if=", "shutdown"]
+            if any(b in cmd for b in blocked):
+                return {"success": False, "error": "차단된 명령어"}
+            project_root = os.path.dirname(BASE_DIR)
+            try:
+                result = subprocess.run(
+                    cmd, shell=True, capture_output=True, text=True,
+                    timeout=30, cwd=project_root
+                )
+                return {"success": True, "stdout": result.stdout[:3000], "stderr": result.stderr[:1000]}
+            except subprocess.TimeoutExpired:
+                return {"success": False, "error": "30초 타임아웃"}
 
         return {"success": False, "error": f"지원하지 않는 도구: {tool_name}"}
 

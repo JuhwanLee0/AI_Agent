@@ -54,36 +54,39 @@ class PlaywrightBrowser:
                     headless=self.headless,
                     args=CHROMIUM_ARGS
                 )
-                context = browser.new_context(
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                )
-                page = context.new_page()
-                page.set_default_timeout(self.timeout_ms)
+                context = None
+                try:
+                    context = browser.new_context(
+                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    )
+                    page = context.new_page()
+                    page.set_default_timeout(self.timeout_ms)
 
-                logger.info(f"[Playwright] Navigating to: {url}")
-                page.goto(url, wait_until="domcontentloaded")
+                    logger.info(f"[Playwright] Navigating to: {url}")
+                    page.goto(url, wait_until="domcontentloaded")
 
-                if wait_selector:
-                    try:
-                        page.wait_for_selector(wait_selector, timeout=5000)
-                    except Exception:
-                        logger.warning(f"[Playwright] Timeout waiting for selector: {wait_selector}")
+                    if wait_selector:
+                        try:
+                            page.wait_for_selector(wait_selector, timeout=5000)
+                        except Exception:
+                            logger.warning(f"[Playwright] Timeout waiting for selector: {wait_selector}")
 
-                title = page.title()
-                # 불필요한 스크립트/스타일 태그 제거 후 텍스트 추출
-                body_text = page.inner_text("body")
-                clean_text = "\n".join([line.strip() for line in body_text.splitlines() if line.strip()])
+                    title = page.title()
+                    # 불필요한 스크립트/스타일 태그 제거 후 텍스트 추출
+                    body_text = page.inner_text("body")
+                    clean_text = "\n".join([line.strip() for line in body_text.splitlines() if line.strip()])
 
-                context.close()
-                browser.close()
-
-                return {
-                    "success": True,
-                    "url": url,
-                    "title": title,
-                    "text": clean_text[:4000],  # LLM 컨텍스트 한도 고려 4000자 제한
-                    "length": len(clean_text)
-                }
+                    return {
+                        "success": True,
+                        "url": url,
+                        "title": title,
+                        "text": clean_text[:4000],  # LLM 컨텍스트 한도 고려 4000자 제한
+                        "length": len(clean_text)
+                    }
+                finally:
+                    if context:
+                        context.close()
+                    browser.close()
         except Exception as e:
             logger.error(f"[Playwright] fetch_page_text error: {e}")
             return {
@@ -111,23 +114,30 @@ class PlaywrightBrowser:
                     headless=self.headless,
                     args=CHROMIUM_ARGS
                 )
-                context = browser.new_context(viewport={"width": 1280, "height": 800})
-                page = context.new_page()
-                page.set_default_timeout(self.timeout_ms)
+                context = None
+                try:
+                    context = browser.new_context(viewport={"width": 1280, "height": 800})
+                    page = context.new_page()
+                    page.set_default_timeout(self.timeout_ms)
 
-                logger.info(f"[Playwright] Capturing screenshot: {url} -> {output_path}")
-                page.goto(url, wait_until="networkidle")
-                page.screenshot(path=output_path, full_page=full_page)
+                    logger.info(f"[Playwright] Capturing screenshot: {url} -> {output_path}")
+                    try:
+                        page.goto(url, wait_until="networkidle")
+                    except Exception:
+                        logger.warning(f"[Playwright] networkidle timeout, falling back to load event")
+                        page.goto(url, wait_until="load")
+                    page.screenshot(path=output_path, full_page=full_page)
 
-                context.close()
-                browser.close()
-
-                return {
-                    "success": True,
-                    "url": url,
-                    "output_path": output_path,
-                    "file_size": os.path.getsize(output_path)
-                }
+                    return {
+                        "success": True,
+                        "url": url,
+                        "output_path": output_path,
+                        "file_size": os.path.getsize(output_path)
+                    }
+                finally:
+                    if context:
+                        context.close()
+                    browser.close()
         except Exception as e:
             logger.error(f"[Playwright] take_screenshot error: {e}")
             return {

@@ -21,21 +21,75 @@ def detect_language(text: str) -> str:
 def generate_sentence_audio(text: str, lang: str, output_path: str) -> bool:
     """
     각 언어별 엔진을 호출하여 임시 wav 생성 (24kHz Mono 변환)
+    - 1순위: 로컬 CLI (CosyVoice for KO / Chatterbox for EN)
+    - 2순위: edge-tts (초고음질 클라우드 TTS, 무설치 API)
+    - 3순위: gTTS (Google TTS)
+    - 4순위: FFmpeg audio generator fallback
     """
     print(f"[{lang.upper()} TTS Engine] Synthesizing: {text}")
-    # 실제 CosyVoice / Chatterbox CLI 또는 라이브러리 연동부
-    # 로컬 환경에 gTTS 또는 edge-tts가 있을 경우 fallback 처리 가능
+    
+    # 1. edge-tts 시도 (가장 자연스러운 한국어/영어 음성)
     try:
-        # 우선 ffmpeg를 통한 목업 또는 표준 TTS 파이프라인 구성
-        # 예시: edge-tts 또는 cosyvoice 호출
+        voice = "ko-KR-SunHiNeural" if lang == "ko" else "en-US-JennyNeural"
+        cmd = [
+            "edge-tts",
+            "--voice", voice,
+            "--text", text,
+            "--write-media", output_path
+        ]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        if res.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            # 24kHz 모노 변환
+            _resample_audio(output_path)
+            return True
+    except Exception:
+        pass
+
+    # 2. gTTS 시도
+    try:
+        from gtts import gTTS
+        tts = gTTS(text=text, lang=lang)
+        tts.save(output_path)
+        _resample_audio(output_path)
+        return True
+    except Exception:
+        pass
+
+    # 3. CosyVoice / Chatterbox CLI 시도
+    try:
+        cli_name = "cosyvoice" if lang == "ko" else "chatterbox"
+        cmd = [cli_name, "--text", text, "--output", output_path]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if res.returncode == 0 and os.path.exists(output_path):
+            _resample_audio(output_path)
+            return True
+    except Exception:
+        pass
+
+    # 4. Fallback (FFmpeg sine wave mock)
+    try:
         subprocess.run([
-            "ffmpeg", "-y", "-f", "lavfi", "-i", f"sine=frequency=440:duration=1",
+            "ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
             "-ar", "24000", "-ac", "1", output_path
         ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return True
     except Exception as e:
         print(f"Error generating audio: {e}", file=sys.stderr)
         return False
+
+def _resample_audio(file_path: str):
+    """오디오 파일을 24000Hz 1채널(모노)로 정규화"""
+    try:
+        temp_out = f"{file_path}.resampled.wav"
+        cmd = [
+            "ffmpeg", "-y", "-i", file_path,
+            "-ar", "24000", "-ac", "1", temp_out
+        ]
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if os.path.exists(temp_out):
+            os.replace(temp_out, file_path)
+    except Exception:
+        pass
 
 def process_script(script_path: str, output_wav_path: str):
     if not os.path.exists(script_path):
@@ -67,8 +121,14 @@ def process_script(script_path: str, output_wav_path: str):
         "-i", str(concat_list),
         "-ar", "24000", "-ac", "1", output_wav_path
     ]
-    subprocess.run(cmd, check=True)
-    print(f"TTS Audio Complete: {output_wav_path}")
+    try:
+        subprocess.run(cmd, check=True)
+        print(f"TTS Audio Complete: {output_wav_path}")
+    finally:
+        # 임시 파일 정리 (디스크 누수 방지)
+        import shutil
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Dual-Engine TTS Pipeline (24kHz Mono)")

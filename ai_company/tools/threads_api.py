@@ -26,6 +26,7 @@ class ThreadsApiTool:
     def publish_text(self, text: str, reply_to_id: Optional[str] = None) -> Dict[str, Any]:
         """
         스레드 텍스트 게시물 또는 답글 발행 (2-Step Graph API)
+        500자 초과 시 자동으로 여러 개의 스레드로 분할하여 답글(Reply) 체이닝 발행
         """
         if not self.is_configured():
             logger.warning("[Threads] THREADS_USER_ID 또는 THREADS_ACCESS_TOKEN 미설정 상태 (가상 완료 처리)")
@@ -36,50 +37,76 @@ class ThreadsApiTool:
                 "preview": text[:200]
             }
 
-        try:
-            # 1. 미디어 컨테이너 생성
-            container_url = f"{self.base_url}/{self.user_id}/threads"
-            payload = {
-                "access_token": self.access_token,
-                "media_type": "TEXT",
-                "text": text
-            }
-            if reply_to_id:
-                payload["reply_to_id"] = reply_to_id
+        # 500자 제한 처리 (480자 단위 분할)
+        chunks = []
+        max_len = 480
+        remaining = text.strip()
+        while len(remaining) > max_len:
+            # 단어 단위 분할
+            idx = remaining.rfind("\n", 0, max_len)
+            if idx == -1:
+                idx = remaining.rfind(" ", 0, max_len)
+            if idx == -1:
+                idx = max_len
+            chunks.append(remaining[:idx].strip())
+            remaining = remaining[idx:].strip()
+        if remaining:
+            chunks.append(remaining)
 
-            res = requests.post(container_url, data=payload, timeout=30)
-            res.raise_for_status()
-            creation_data = res.json()
-            creation_id = creation_data.get("id")
+        post_ids = []
+        current_reply_id = reply_to_id
 
-            if not creation_id:
-                return {"success": False, "error": f"컨테이너 ID 생성 실패: {creation_data}"}
+        for idx, chunk in enumerate(chunks):
+            try:
+                # 1. 미디어 컨테이너 생성
+                container_url = f"{self.base_url}/{self.user_id}/threads"
+                payload = {
+                    "access_token": self.access_token,
+                    "media_type": "TEXT",
+                    "text": chunk
+                }
+                if current_reply_id:
+                    payload["reply_to_id"] = current_reply_id
 
-            # 2. 컨테이너 발행
-            publish_url = f"{self.base_url}/{self.user_id}/threads_publish"
-            pub_payload = {
-                "access_token": self.access_token,
-                "creation_id": creation_id
-            }
-            pub_res = requests.post(publish_url, data=pub_payload, timeout=30)
-            pub_res.raise_for_status()
-            pub_data = pub_res.json()
-            post_id = pub_data.get("id")
+                res = requests.post(container_url, data=payload, timeout=30)
+                res.raise_for_status()
+                creation_data = res.json()
+                creation_id = creation_data.get("id")
 
-            logger.info(f"[Threads] 🎉 포스팅 완료 (Post ID: {post_id})")
-            return {
-                "success": True,
-                "status": "PUBLISHED",
-                "post_id": post_id,
-                "message": "스레드에 성공적으로 발행되었습니다."
-            }
+                if not creation_id:
+                    return {"success": False, "error": f"컨테이너 ID 생성 실패: {creation_data}"}
 
-        except Exception as e:
-            logger.error(f"[Threads] publish_text 오류: {e}")
-            return {
-                "success": False,
-                "error": str(e)
-            }
+                # 2. 컨테이너 발행
+                publish_url = f"{self.base_url}/{self.user_id}/threads_publish"
+                pub_payload = {
+                    "access_token": self.access_token,
+                    "creation_id": creation_id
+                }
+                pub_res = requests.post(publish_url, data=pub_payload, timeout=30)
+                pub_res.raise_for_status()
+                pub_data = pub_res.json()
+                post_id = pub_data.get("id")
+                
+                post_ids.append(post_id)
+                current_reply_id = post_id # 다음 스레드는 이번 스레드의 답글로 연결
+
+                logger.info(f"[Threads] 🎉 포스팅 완료 (Chunk {idx+1}/{len(chunks)}, Post ID: {post_id})")
+
+            except Exception as e:
+                logger.error(f"[Threads] publish_text 오류 (Chunk {idx+1}): {e}")
+                return {
+                    "success": False,
+                    "published_ids": post_ids,
+                    "error": str(e)
+                }
+
+        return {
+            "success": True,
+            "status": "PUBLISHED",
+            "post_id": post_ids[0] if post_ids else None,
+            "all_post_ids": post_ids,
+            "message": f"스레드에 총 {len(post_ids)}개 연결 포스트가 성공적으로 발행되었습니다."
+        }
 
     def publish_image(self, text: str, image_url: str, reply_to_id: Optional[str] = None) -> Dict[str, Any]:
         """

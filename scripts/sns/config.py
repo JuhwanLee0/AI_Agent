@@ -42,18 +42,18 @@ def normalize_model_name(raw_name: str, fallback: str = "gemini-3.6-flash") -> s
     """
     사용자 친화적 버전 표기(3.6, 3.5 등)를 Google Gemini 공식 API 엔드포인트명으로 자동 변환
     - '3.6' / '3.6 flash' / '3.7' -> 'gemini-3.6-flash'
-    - '3.5-lite' / '3.5 lite'     -> 'gemini-2.0-flash-lite'
-    - '3.5' / '3.5 flash'          -> 'gemini-2.0-flash'
+    - '3.5-lite' / '3.5 lite'     -> 'gemini-3.6-flash'
+    - '3.5' / '3.5 flash'          -> 'gemini-3.6-flash'
     """
     raw = (raw_name or "").strip().lower()
     if not raw:
         return fallback
-    if raw in ("3.5-lite", "3.5 lite", "3.5_lite", "lite", "gemini-3.5-lite", "gemini-2.0-flash-lite", "flash-lite"):
-        return "gemini-2.0-flash-lite"
-    elif raw in ("3.6", "3.6 flash", "3.6-flash", "3.7", "3.7 flash", "gemini-3.6", "gemini-3.6-flash", "gemini-2.5-flash"):
+    if raw in ("3.5-lite", "3.5 lite", "3.5_lite", "lite", "gemini-3.5-lite", "gemini-2.0-flash-lite", "flash-lite", "2.0-flash-lite"):
+        return "gemini-3.6-flash"
+    elif raw in ("3.6", "3.6 flash", "3.6-flash", "3.7", "3.7 flash", "gemini-3.6", "gemini-3.6-flash", "gemini-2.5-flash", "2.5-flash", "flash", "gemini-2.0-flash", "2.0-flash"):
         return "gemini-3.6-flash"
     elif raw in ("3.5", "3.5 flash", "3.5-flash", "gemini-3.5", "gemini-3.5-flash"):
-        return "gemini-2.0-flash"
+        return "gemini-3.6-flash"
     elif not raw.startswith("gemini-"):
         return f"gemini-{raw}"
     return raw

@@ -1,0 +1,201 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=Outfit:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --color-pine: #173426;
+  --color-pine-dark: #0F2218;
+  --color-pine-light: #244C39;
+  --color-paper: #FAF8F5;
+  --color-paper-card: #F4F0E8;
+  --color-ink: #141715;
+  --color-ink-muted: #525954;
+  --color-terracotta: #9E441B;
+  --color-terracotta-hover: #7E3412;
+  --color-border: #E2DDD4;
+  --color-border-subtle: #EDE8DF;
+  
+  --font-serif: 'Newsreader', Georgia, serif;
+  --font-serif-title: 'Cinzel', 'Newsreader', Georgia, serif;
+  --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #FAF8F5;
+  color: #141715;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, .font-serif {
+  font-family: var(--font-serif);
+  letter-spacing: -0.015em;
+}
+
+.font-serif-title {
+  font-family: var(--font-serif-title);
+  letter-spacing: 0.02em;
+}
+
+/* Background Utility Classes */
+.bg-pine {
+  background-color: #173426 !important;
+  color: #FAF8F5 !important;
+}
+
+.bg-paper {
+  background-color: #FAF8F5 !important;
+}
+
+.bg-paper-card {
+  background-color: #F4F0E8 !important;
+}
+
+/* Editorial Line & Tag */
+.editorial-line {
+  height: 1px;
+  background-color: #E2DDD4;
+}
+
+.editorial-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #173426;
+  border-bottom: 1.5px solid #9E441B;
+  padding-bottom: 2px;
+}
+
+/* Custom Button Styles */
+.btn-primary {
+  background-color: #173426;
+  color: #FFFFFF !important;
+  font-weight: 600;
+  transition: background-color 0.2s ease;
+}
+.btn-primary:hover {
+  background-color: #244C39;
+}
+
+.btn-accent {
+  background-color: #9E441B;
+  color: #FFFFFF !important;
+  font-weight: 600;
+  transition: background-color 0.2s ease;
+}
+.btn-accent:hover {
+  background-color: #7E3412;
+}
+
+.btn-outline {
+  border: 1px solid #173426;
+  color: #173426;
+  font-weight: 600;
+  background: transparent;
+  transition: all 0.2s ease;
+}
+.btn-outline:hover {
+  background-color: #173426;
+  color: #FFFFFF !important;
+}
+
+/* Gallery Masonry & Card Styling */
+.gallery-grid {
+  column-count: 1;
+  column-gap: 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .gallery-grid {
+    column-count: 2;
+  }
+}
+
+@media (min-width: 1024px) {
+  .gallery-grid {
+    column-count: 3;
+  }
+}
+
+.gallery-item {
+  break-inside: avoid;
+  margin-bottom: 1.5rem;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #E2DDD4;
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.gallery-item:hover {
+  border-color: #C8C1B4;
+  box-shadow: 0 10px 20px -8px rgba(23, 52, 38, 0.12);
+}
+
+.gallery-item img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.gallery-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(15, 34, 24, 0.92) 0%, rgba(15, 34, 24, 0.3) 60%, transparent 100%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 1.5rem;
+  color: #FFFFFF;
+}
+
+.gallery-item:hover .gallery-overlay {
+  opacity: 1;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #FAF8F5;
+}
+::-webkit-scrollbar-thumb {
+  background: #D1CBC0;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #A8A194;
+}
+
+/* Lightbox Modal Animation */
+.modal-backdrop {
+  background-color: rgba(15, 34, 24, 0.9);
+  backdrop-filter: blur(8px);
+}
+
+/* Drag & Drop Area */
+.dropzone {
+  border: 2px dashed #E2DDD4;
+  background-color: #FAF8F5;
+  padding: 2rem 1.5rem;
+  transition: all 0.2s ease;
+}
+.dropzone.dragover {
+  border-color: #173426;
+  background-color: #EBF3EE;
+}
+
+/* Smooth Tabs */
+.filter-btn.active {
+  background-color: #173426 !important;
+  color: #FFFFFF !important;
+  border-color: #173426 !important;
+}

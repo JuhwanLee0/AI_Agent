@@ -1,0 +1,101 @@
+{
+  "current_project": "첫 프로젝트를 시작하자! <https://www.treeoflifemis...",
+  "active_agent": "None",
+  "progress_percent": 100,
+  "active_phase": "Phase 1: Core Automation Pipeline",
+  "intelligence_stack": [
+    "Headroom-AI",
+    "Claude-Mem",
+    "GSD",
+    "Graphify",
+    "Ponytail"
+  ],
+  "agents_status": {
+    "CEO": {
+      "status": "완료",
+      "last_task": "인수인계 완료",
+      "updated_at": "2026-08-21 11:38:15"
+    },
+    "개발팀장": {
+      "status": "완료",
+      "last_task": "인수인계 완료",
+      "updated_at": "2026-08-21 11:38:50"
+    },
+    "개발_사원A": {
+      "status": "대기",
+      "last_task": "-",
+      "updated_at": ""
+    },
+    "개발_사원B": {
+      "status": "대기",
+      "last_task": "-",
+      "updated_at": ""
+    },
+    "개발_사원C": {
+      "status": "대기",
+      "last_task": "-",
+      "updated_at": ""
+    },
+    "개발_사원D": {
+      "status": "대기",
+      "last_task": "-",
+      "updated_at": ""
+    },
+    "개발_사원E": {
+      "status": "대기",
+      "last_task": "-",
+      "updated_at": ""
+    },
+    "마케팅팀장": {
+      "status": "대기",
+      "last_task": "-",
+      "updated_at": ""
+    },
+    "마케팅_사원A": {
+      "status": "대기",
+      "last_task": "-",
+      "updated_at": ""
+    },
+    "마케팅_사원B": {
+      "status": "대기",
+      "last_task": "-",
+      "updated_at": ""
+    },
+    "마케팅_사원C": {
+      "status": "대기",
+      "last_task": "-",
+      "updated_at": ""
+    },
+    "마케팅_사원D": {
+      "status": "대기",
+      "last_task": "-",
+      "updated_at": ""
+    },
+    "미디어팀장": {
+      "status": "대기",
+      "last_task": "-",
+      "updated_at": ""
+    },
+    "미디어_사원A": {
+      "status": "대기",
+      "last_task": "-",
+      "updated_at": ""
+    },
+    "미디어_사원B": {
+      "status": "대기",
+      "last_task": "-",
+      "updated_at": ""
+    },
+    "미디어_사원C": {
+      "status": "대기",
+      "last_task": "-",
+      "updated_at": ""
+    },
+    "미디어_사원D": {
+      "status": "대기",
+      "last_task": "-",
+      "updated_at": ""
+    }
+  },
+  "current_project_dir": "output/20260821_1137_첫_프로젝트를_시작하자_https_ww"
+}

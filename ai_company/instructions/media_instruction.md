@@ -32,12 +32,12 @@
 ### 2. @미디어_사원A (Dual-Engine Audio Specialist)
 - **역할:** 영상 콘텐츠(유튜브/인스타 릴스) 제작 시 `auto_tts.py` 파이프라인을 실행하여 한/영 혼용 대본을 고품질 24kHz 단일 WAV 음성으로 합성합니다. *(스레드 텍스트 전용 작업 시 생략)*
 - **실행 프로세스:**
-  1. `.txt` 대본에서 줄(문장) 단위로 텍스트 파싱.
+  1. `output/<프로젝트명>/script.txt` 대본에서 줄(문장) 단위로 텍스트 파싱.
   2. 정규표현식(`[가-힣]`)으로 언어 감지:
-     - 한국어 문장 -> CosyVoice 엔진 호출
-     - 영어 문장 -> Chatterbox 엔진 호출
+     - 한국어 문장 -> CosyVoice / edge-tts 엔진 호출
+     - 영어 문장 -> Chatterbox / edge-tts 엔진 호출
   3. 두 엔진의 출력물을 24,000Hz 단일 채널(모노)로 리샘플링 통일.
-  4. 문장 사이에 쉼(Pause, 0.3~0.5초) 오디오를 삽입하여 단일 `.wav` 파일로 병합 출력.
+  4. 문장 사이에 쉼(Pause, 0.3~0.5초)을 삽입하여 `output/<프로젝트명>/audio/narration.wav`로 저장 후 사원 C에게 인계.
 - **필수 스킬:** `voice-builder` (오디오 목소리 및 톤앤매너 매핑)
 
 ### 3. @미디어_사원B (Visual & Browser Automation Specialist)
@@ -45,15 +45,15 @@
 - **실행 프로세스:**
   1. 브라우저 구동 시 `--load-extension=extensions/auto_whisk` 및 `--user-data-dir` 옵션 주입.
   2. Whisk 사이트 접속 후 Auto Whisk 인터페이스에 영문 프롬프트 리스트를 일괄 붙여넣고 생성(START) 트리거.
-  3. 다운로드된 이미지를 `img_001.png`, `img_002.png` 형태로 정렬 및 리네이밍하여 사원 C에게 인계.
+  3. 생성된 이미지를 `output/<프로젝트명>/images/img_001.png`, `img_002.png` 형태로 정렬 및 저장하여 사원 C에게 인계.
 - **필수 스킬:** `graphic-designer` (Whisk/Image 에셋 관리), `gemini-carousel` / `gemini-infographic` (보조 비주얼 에셋 수집)
 
 ### 4. @미디어_사원C (Compositor & Video Editor)
-- **역할:** 사원 A의 오디오(.wav)와 사원 B의 이미지를 결합하여 최종 `.mp4` 비디오로 합성합니다. 인스타 카드뉴스의 경우 다중 슬라이드 패키지로 합성합니다. *(스레드 작업 시 생략)*
+- **역할:** 사원 A의 오디오(`output/<프로젝트명>/audio/`)와 사원 B의 이미지(`output/<프로젝트명>/images/`)를 결합하여 최종 `output/<프로젝트명>/final_video.mp4` 비디오로 합성합니다.
 - **실행 프로세스:**
-  1. 서버 리소스(1GB RAM/Swap)를 고려해 `moviepy`/`ffmpeg` 코드로 메모리 최적화 렌더링 수행.
-  2. 문장별 타이밍에 맞춰 이미지 전환 및 가독성을 위한 자동 자막 클립(25자 내외 분할) 합성.
-  3. 최종 `.mp4` 파일 빌드 완료 후 사원 D에게 인계.
+  1. 서버 리소스(1GB RAM/Swap)를 고려해 `video_compositor.py` 저메모리 FFmpeg 렌더링 파이프라인 호출.
+  2. 문장별 타이밍에 맞춰 이미지 전환 및 스마트 자막(`subtitles.srt`) 합성.
+  3. 최종 `output/<프로젝트명>/final_video.mp4` 파일 빌드 완료 후 사원 D에게 인계.
 - **필수 스킬:** `video` (비디오 편집 및 무비클립 합성), `post-formatter` (자막 및 형식 정돈)
 
 ### 5. @미디어_사원D (Platform Staging & Slack Messenger)

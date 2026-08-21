@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tree Of Life Global Missions | 생명나무 글로벌 미션</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Custom Design System Styles -->
+  <link rel="stylesheet" href="css/styles.css">
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-paper text-[#141715] selection:bg-[#173426] selection:text-white">
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- Top Announcement / Scripture Banner -->
+  <div class="bg-pine text-xs p-4 text-center font-medium tracking-wide flex items-center justify-center gap-2">
+    <span class="text-[#9E441B] text-sm">✦</span>
+    <span>"그 잎사귀들은 만국을 치료하기 위하여 있더라" (요한계시록 22:2)</span>
+    <span class="hidden md:inline text-stone-400">·</span>
+    <span class="hidden md:inline text-stone-300">Spreading the powerful message of Jesus, one bible at a time.</span>
+  </div>
+
+  <!-- Header & Navigation -->
+  <header class="sticky top-0 z-40 bg-paper border-b border-[#E2DDD4]">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+      
+      <!-- Brand Logo -->
+      <a href="#" class="flex items-center gap-3 group">
+        <div class="w-11 h-11 rounded-full bg-pine flex items-center justify-center font-serif-title text-xl font-bold shadow-sm group-hover:bg-[#9E441B] transition-colors">
+          🌱
+        </div>
+        <div>
+          <span class="block font-serif-title text-xl sm:text-2xl font-bold tracking-tight text-[#173426] leading-none">Tree Of Life</span>
+          <span class="text-[11px] tracking-wider font-semibold text-[#525954]">Global Missions</span>
+        </div>
+      </a>
+
+      <!-- Desktop Navigation Menu -->
+      <nav class="hidden md:flex items-center gap-8 text-sm font-medium text-[#141715]">
+        <a href="#about" class="hover:text-[#9E441B] transition-colors text-[#141715]">소개 (About)</a>
+        <a href="#impact" class="hover:text-[#9E441B] transition-colors text-[#141715]">사역 성과</a>
+        <a href="#gallery" class="hover:text-[#9E441B] transition-colors flex items-center gap-1 font-semibold text-[#173426]">
+          <span>현장 갤러리</span>
+          <span class="w-1.5 h-1.5 rounded-full bg-[#9E441B]"></span>
+        </a>
+        <a href="#team" class="hover:text-[#9E441B] transition-colors text-[#141715]">사역팀</a>
+        <a href="#how-to-give" class="hover:text-[#9E441B] transition-colors text-[#141715]">동참 안내</a>
+      </nav>
+
+      <!-- Action Buttons & Admin Toggle -->
+      <div class="flex items-center gap-3">
+        
+        <!-- Admin Status Badge -->
+        <span id="admin-status-badge" class="hidden text-xs bg-amber-100 text-amber-950 border border-amber-300 px-3 py-1.5 rounded-md font-semibold items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-amber-700"></span>
+          <span>관리자 모드 활성</span>
+        </span>
+
+        <!-- Admin Toggle Button -->
+        <button id="admin-toggle-btn" onclick="handleAdminToggle()" 
+                class="hidden sm:inline-flex text-xs px-3.5 py-2 border border-[#E2DDD4] rounded-md text-[#525954] hover:bg-[#F4F0E8] transition-colors font-medium">
+          관리자 모드
+        </button>
+
+        <!-- CTA Give Button -->
+        <button onclick="openDonateModal()" class="btn-accent px-5 py-2.5 rounded-md text-sm shadow-sm flex items-center gap-1.5">
+          <span>후원 동참하기</span>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+          </svg>
+        </button>
+
+        <!-- Mobile Menu Hamburger -->
+        <button id="mobile-menu-btn" class="md:hidden p-2 text-[#141715] hover:bg-stone-200 rounded-md">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path>
+          </svg>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Mobile Dropdown Navigation -->
+    <div id="mobile-menu" class="hidden md:hidden bg-paper border-b border-[#E2DDD4] p-6 space-y-3">
+      <a href="#about" class="block text-sm font-medium hover:text-[#9E441B] text-[#141715]">소개 (About)</a>
+      <a href="#impact" class="block text-sm font-medium hover:text-[#9E441B] text-[#141715]">사역 성과</a>
+      <a href="#gallery" class="block text-sm font-medium text-[#173426] font-bold">현장 갤러리</a>
+      <a href="#team" class="block text-sm font-medium hover:text-[#9E441B] text-[#141715]">사역팀</a>
+      <a href="#how-to-give" class="block text-sm font-medium hover:text-[#9E441B] text-[#141715]">동참 안내</a>
+      <div class="pt-3 border-t border-[#E2DDD4]">
+        <button onclick="handleAdminToggle()" class="w-full text-left text-xs text-[#525954] py-1.5 font-medium">
+          🔑 관리자 모드 전환 (데모: 1234)
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- HERO SECTION -->
+    <section class="relative pt-12 pb-20 lg:pt-20 lg:pb-28 border-b border-[#E2DDD4]">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
+          
+          <!-- Hero Text -->
+          <div class="lg:col-span-7 space-y-6">
+            <div class="editorial-tag">
+              Global Missionary & Relief Organization
+            </div>
+
+            <h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold font-serif text-[#173426] leading-[1.12]">
+              한 권의 성경으로,<br/>
+              <span class="text-[#9E441B] italic font-normal">생명의 빛</span>을 전합니다.
+            </h1>
+
+            <p class="text-lg sm:text-xl text-[#525954] font-light max-w-2xl leading-relaxed">
+              Tree Of Life Global Missions는 멕시코 피에드라스 네그라스와 이글 패스 국경을 비롯하여, 복음과 따뜻한 도움이 절실한 이웃들에게 성경을 배포하고 구호 사역을 펼치는 글로벌 선교 공동체입니다.
+            </p>
+
+            <div class="pt-4 flex flex-wrap items-center gap-4">
+              <a href="#gallery" class="btn-primary px-7 py-3.5 rounded-md text-sm font-semibold inline-flex items-center gap-2 shadow-sm">
+                <span>사역 현장 사진 보기</span>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+              </a>
+
+              <a href="#about" class="btn-outline px-6 py-3.5 rounded-md text-sm font-semibold">
+                사역 비전 알아보기
+              </a>
+            </div>
+
+            <!-- Trust Badge & Quote -->
+            <div class="pt-6 border-t border-[#E2DDD4] flex items-center gap-4 text-xs text-[#525954]">
+              <div class="flex -space-x-2">
+                <img class="inline-block h-8 w-8 rounded-full ring-2 ring-[#FAF8F5]" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80" alt="Aimee Crabtree" />
+                <img class="inline-block h-8 w-8 rounded-full ring-2 ring-[#FAF8F5]" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80" alt="Don Crabtree" />
+                <img class="inline-block h-8 w-8 rounded-full ring-2 ring-[#FAF8F5]" src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&q=80" alt="Mission Team Member" />
+              </div>
+              <p>1995년 설립 이래 <strong>30여 년간</strong> 현장 중심의 헌신적 사역 지속</p>
+            </div>
+          </div>
+
+          <!-- Hero Editorial Image Showcase -->
+          <div class="lg:col-span-5 relative">
+            <div class="relative mx-auto max-w-md lg:max-w-none">
+              <!-- Main Feature Image -->
+              <div class="overflow-hidden rounded-lg shadow-xl border border-[#E2DDD4]">
+                <img src="https://images.unsplash.com/photo-1504052434569-70ad5836ab65?auto=format&fit=crop&w=1000&q=80" 
+                     alt="Bible Distribution Mission" 
+                     class="w-full h-[400px] sm:h-[460px] object-cover" />
+              </div>
+              
+              <!-- Floating Caption Card -->
+              <div class="absolute -bottom-5 -left-4 sm:-left-6 bg-paper border border-[#E2DDD4] p-6 rounded-md shadow-md max-w-xs sm:max-w-sm">
+                <span class="text-[11px] font-bold text-[#9E441B] tracking-wider">Field Update</span>
+                <p class="font-serif font-bold text-[#173426] text-base mt-0.5">국경 지역 성경 배포 사역</p>
+                <p class="text-xs text-[#525954] mt-1 leading-relaxed">"말씀이 전달되는 곳마다 절망이 희망으로 바뀌고 있습니다."</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- IMPACT STATS STRIP -->
+    <section id="impact" class="py-14 border-b border-[#E2DDD4]">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-8 divide-y md:divide-y-0 md:divide-x divide-[#E2DDD4]">
+          
+          <div class="pt-4 md:pt-0 md:px-6 text-center md:text-left">
+            <span class="block text-xs font-serif text-[#9E441B] mb-1">01 / Distribution</span>
+            <span class="block font-serif text-3xl sm:text-4xl font-bold text-[#173426]">24,800+</span>
+            <span class="text-xs sm:text-sm text-[#525954] mt-1 block">전달된 성경 수 (권)</span>
+          </div>
+
+          <div class="pt-4 md:pt-0 md:px-6 text-center md:text-left">
+            <span class="block text-xs font-serif text-[#9E441B] mb-1">02 / Global Reach</span>
+            <span class="block font-serif text-3xl sm:text-4xl font-bold text-[#173426]">31개국</span>
+            <span class="text-xs sm:text-sm text-[#525954] mt-1 block">사역 및 협력 국가</span>
+          </div>
+
+          <div class="pt-4 md:pt-0 md:px-6 text-center md:text-left">
+            <span class="block text-xs font-serif text-[#9E441B] mb-1">03 / Church Planting</span>
+            <span class="block font-serif text-3xl sm:text-4xl font-bold text-[#173426]">150+</span>
+            <span class="text-xs sm:text-sm text-[#525954] mt-1 block">세워진 현지 가정 교회</span>
+          </div>
+
+          <div class="pt-4 md:pt-0 md:px-6 text-center md:text-left">
+            <span class="block text-xs font-serif text-[#9E441B] mb-1">04 / Partners</span>
+            <span class="block font-serif text-3xl sm:text-4xl font-bold text-[#173426]">1,200+</span>
+            <span class="text-xs sm:text-sm text-[#525954] mt-1 block">정기 기도 및 후원 동역자</span>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- MISSION & ABOUT SECTION -->
+    <section id="about" class="py-20 border-b border-[#E2DDD4]">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <div class="max-w-3xl mb-14">
+          <div class="editorial-tag mb-3">Our Core Calling</div>
+          <h2 class="text-3xl sm:text-4xl font-bold font-serif text-[#173426]">
+            가장 낮은 곳에서 시작되는<br/>
+            변함없는 헌신과 섬김
+          </h2>
+          <p class="text-[#525954] text-base sm:text-lg mt-4 leading-relaxed">
+            Tree Of Life Missions는 단순한 물질적 구호를 넘어, 각 사람의 마음에 하나님의 영원한 말씀이 심겨 자라나도록 돕습니다. 
+            국경의 난민 가정, 빈민가 어린이, 고립된 마을에 직접 찾아가 함께 울고 웃으며 복음의 생명력을 나눕니다.
+          </p>
+        </div>
+
+        <!-- 3 Pillars Flat Layout -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+          
+          <div class="p-8 border border-[#E2DDD4]">
+            <div class="text-2xl mb-4">📖</div>
+            <h3 class="font-serif text-xl font-bold text-[#173426] mb-2">성경 번역 및 무상 배포</h3>
+            <p class="text-sm text-[#525954] leading-relaxed">
+              모국어로 된 성경을 읽지 못하는 소수 민족과 빈민 지역 주민들에게 자국어 성경과 쉬운 성경 교재를 보급합니다.
+            </p>
+          </div>
+
+          <div class="p-8 border border-[#E2DDD4]">
+            <div class="text-2xl mb-4">🏠</div>
+            <h3 class="font-serif text-xl font-bold text-[#173426] mb-2">난민 및 빈민 구호 사역</h3>
+            <p class="text-sm text-[#525954] leading-relaxed">
+              국경 지대 피난민과 소외된 이웃들에게 긴급 식량, 위생 키트, 임시 주거지 재건 등 실질적인 사랑의 손길을 전합니다.
+            </p>
+          </div>
+
+          <div class="p-8 border border-[#E2DDD4]">
+            <div class="text-2xl mb-4">🌱</div>
+            <h3 class="font-serif text-xl font-bold text-[#173426] mb-2">현지 사역자 양성 & 교회 개척</h3>
+            <p class="text-sm text-[#525954] leading-relaxed">
+              현지 청년들과 지도자들을 제자훈련하여, 외부 지원 없이도 스스로 자립하고 복음을 전파하는 건강한 공동체를 세웁니다.
+            </p>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- INTERACTIVE MISSION GALLERY SECTION -->
+    <section id="gallery" class="py-20 border-b border-[#E2DDD4]">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <!-- Gallery Header & Controls -->
+        <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-8 border-b border-[#E2DDD4]">
+          <div>
+            <div class="editorial-tag mb-2">Live Mission Moments</div>
+            <h2 class="text-3xl sm:text-4xl font-bold font-serif text-[#173426]">
+              선교 사역 현장 갤러리
+            </h2>
+            <p class="text-sm text-[#525954] mt-2">
+              현장에서 전해오는 생생한 사역의 순간들을 확인하세요. 관리자 모드에서 직접 사진을 업로드하고 관리할 수 있습니다.
+            </p>
+          </div>
+
+          <!-- Category Filter Tabs -->
+          <div class="flex flex-wrap items-center gap-2">
+            <button class="filter-btn active px-4 py-2 text-xs font-semibold rounded-md border border-[#E2DDD4] transition-all" data-category="all">
+              전체 사진
+            </button>
+            <button class="filter-btn px-4 py-2 text-xs font-semibold rounded-md border border-[#E2DDD4] transition-all text-[#141715]" data-category="bibles">
+              성경 배포
+            </button>
+            <button class="filter-btn px-4 py-2 text-xs font-semibold rounded-md border border-[#E2DDD4] transition-all text-[#141715]" data-category="outreach">
+              사역 현장
+            </button>
+            <button class="filter-btn px-4 py-2 text-xs font-semibold rounded-md border border-[#E2DDD4] transition-all text-[#141715]" data-category="relief">
+              구호 및 지원
+            </button>
+            <button class="filter-btn px-4 py-2 text-xs font-semibold rounded-md border border-[#E2DDD4] transition-all text-[#141715]" data-category="community">
+              공동체 예배
+            </button>
+          </div>
+        </div>
+
+        <!-- Admin Action Bar -->
+        <div id="admin-action-bar" class="my-6 p-6 bg-amber-50 border border-amber-200 rounded-lg flex flex-wrap items-center justify-between gap-4" style="display: none;">
+          <div class="flex items-center gap-2 text-xs text-amber-950 font-medium">
+            <span class="text-base">📸</span>
+            <span class="text-amber-950"><strong>관리자 전용 패널:</strong> 새로운 현장 사진을 직접 업로드하거나 기존 사진을 관리할 수 있습니다.</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <button onclick="openUploadModal()" class="btn-primary px-4 py-2 rounded-md text-xs flex items-center gap-1.5 shadow-sm">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+              </svg>
+              <span>새 사진 업로드</span>
+            </button>
+            <button onclick="galleryApp.resetToDefault()" class="text-xs px-3 py-2 text-stone-700 hover:text-stone-900 border border-stone-300 rounded-md hover:bg-stone-100 transition-colors font-medium">
+              초기 데이터 복원
+            </button>
+          </div>
+        </div>
+
+        <!-- Dynamic Masonry Gallery Container -->
+        <div id="gallery-grid" class="gallery-grid mt-8">
+          <!-- Populated by gallery.js -->
+        </div>
+
+      </div>
+    </section>
+
+    <!-- MEET THE TEAM SECTION -->
+    <section id="team" class="py-20 border-b border-[#E2DDD4]">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <div class="max-w-2xl mb-12">
+          <div class="editorial-tag mb-2">Leadership & Missionaries</div>
+          <h2 class="text-3xl sm:text-4xl font-bold font-serif text-[#173426]">
+            현장을 섬기는 동역자들
+          </h2>
+          <p class="text-sm text-[#525954] mt-2">
+            국경과 사역지의 최전선에서 사랑과 헌신으로 섬기는 핵심 리더십을 소개합니다.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+          
+          <div class="p-6 border border-[#E2DDD4]">
+            <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&q=80" 
+                 alt="Don Crabtree" class="w-full h-64 object-cover rounded-md mb-4" />
+            <span class="text-xs font-semibold text-[#9E441B] tracking-wider">Founder & Senior Missionary</span>
+            <h3 class="font-serif text-xl font-bold text-[#173426] mt-1">Don Crabtree</h3>
+            <p class="text-xs text-[#525954] mt-2 leading-relaxed">
+              1995년부터 멕시코 피에드라스 네그라스 국경 지역에서 30년간 성경 배포 및 교회 개척 사역을 총괄하고 있습니다.
+            </p>
+          </div>
+
+          <div class="p-6 border border-[#E2DDD4]">
+            <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80" 
+                 alt="Aimee Crabtree" class="w-full h-64 object-cover rounded-md mb-4" />
+            <span class="text-xs font-semibold text-[#9E441B] tracking-wider">Co-Founder & Children Ministry</span>
+            <h3 class="font-serif text-xl font-bold text-[#173426] mt-1">Aimee Crabtree</h3>
+            <p class="text-xs text-[#525954] mt-2 leading-relaxed">
+              난민 어린이 교육 및 성경 학교, 여성 구호 프로그램을 이끌며 가정의 회복을 돕고 있습니다.
+            </p>
+          </div>
+
+          <div class="p-6 border border-[#E2DDD4]">
+            <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=600&q=80" 
+                 alt="Global Outreach Team" class="w-full h-64 object-cover rounded-md mb-4" />
+            <span class="text-xs font-semibold text-[#9E441B] tracking-wider">Field Operations & Relief</span>
+            <h3 class="font-serif text-xl font-bold text-[#173426] mt-1">사역 및 구호 운영팀</h3>
+            <p class="text-xs text-[#525954] mt-2 leading-relaxed">
+              현지 청년 자원봉사자들과 협력 교회 단기 선교팀으로 구성되어 성경 보급과 구호 물품 전달을 현장에서 실행합니다.
+            </p>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- HOW TO GIVE & CONTRIBUTE SECTION -->
+    <section id="how-to-give" class="py-20 border-b border-[#E2DDD4]">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+          
+          <div class="lg:col-span-7 space-y-6">
+            <div class="editorial-tag">
+              ✦ Partner With Us
+            </div>
+            <h2 class="text-3xl sm:text-5xl font-bold font-serif leading-tight text-[#173426]">
+              당신의 소중한 동참이<br/>
+              한 영혼의 성경이 됩니다.
+            </h2>
+            <p class="text-[#525954] text-base sm:text-lg leading-relaxed font-light">
+              모든 후원금은 100% 현지 성경 인쇄 및 배포, 난민 가정의 긴급 구호 식량 공급에 투명하게 사용됩니다. 
+              작은 나눔이 모여 국경 너머 한 가정의 영원한 삶을 변화시킵니다.
+            </p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 text-sm text-[#141715]">
+              <div class="flex items-start gap-2">
+                <span class="text-[#9E441B] font-bold">✓</span>
+                <span>$20 후원: 스페인어 성경 4권 전달</span>
+              </div>
+              <div class="flex items-start gap-2">
+                <span class="text-[#9E441B] font-bold">✓</span>
+                <span>$50 후원: 난민 가정 1주일 식량 패키지</span>
+              </div>
+              <div class="flex items-start gap-2">
+                <span class="text-[#9E441B] font-bold">✓</span>
+                <span>$100 후원: 어린이 성경 학교 교재 지원</span>
+              </div>
+              <div class="flex items-start gap-2">
+                <span class="text-[#9E441B] font-bold">✓</span>
+                <span>정기 기도 후원: 매월 선교 소식지 발송</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Donation Form Card -->
+          <div class="lg:col-span-5 p-8 border border-[#E2DDD4] rounded-lg">
+            <h3 class="font-serif text-2xl font-bold text-[#173426] mb-1">선교 동참 & 후원 신청</h3>
+            <p class="text-xs text-[#525954] mb-6">아래 양식을 작성해 주시면 후원 계좌 및 안내를 보내드립니다.</p>
+
+            <form onsubmit="handleDonationSubmit(event)" class="space-y-4 text-[#141715]">
+              <div>
+                <label class="block text-xs font-semibold text-[#141715] mb-1">성함 / 교회명 *</label>
+                <input type="text" required placeholder="홍길동 (또는 OO교회)" 
+                       class="w-full px-3.5 py-2.5 bg-white border border-[#E2DDD4] rounded-md text-sm text-[#141715] focus:outline-none focus:border-[#173426]" />
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-[#141715] mb-1">이메일 주소 *</label>
+                <input type="email" required placeholder="contact@example.com" 
+                       class="w-full px-3.5 py-2.5 bg-white border border-[#E2DDD4] rounded-md text-sm text-[#141715] focus:outline-none focus:border-[#173426]" />
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-[#141715] mb-1">동참 방식 선택</label>
+                <select class="w-full px-3.5 py-2.5 bg-white border border-[#E2DDD4] rounded-md text-sm text-[#141715] focus:outline-none focus:border-[#173426]">
+                  <option value="bible">📖 성경 보급 지정 후원 ($20~$100)</option>
+                  <option value="relief">🍲 긴급 구호 및 식량 지원</option>
+                  <option value="monthly">🌱 정기 사역 동역 후원</option>
+                  <option value="volunteer">🤝 단기 선교 및 봉사 참여</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-[#141715] mb-1">메시지 또는 기도 제목</label>
+                <textarea rows="2" placeholder="사역팀을 위한 응원이나 기도 제목을 남겨주세요." 
+                          class="w-full px-3.5 py-2 bg-white border border-[#E2DDD4] rounded-md text-sm text-[#141715] focus:outline-none focus:border-[#173426]"></textarea>
+              </div>
+
+              <button type="submit" class="w-full btn-accent py-3 rounded-md text-sm font-semibold shadow-sm">
+                후원 및 동참 신청 완료하기
+              </button>
+            </form>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="py-14 text-xs border-t border-[#E2DDD4]">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-8 pb-10 border-b border-[#E2DDD4]">
+        
+        <div class="md:col-span-5 space-y-3">
+          <div class="flex items-center gap-2 text-[#173426] font-serif-title text-lg font-bold">
+            <span>🌱</span>
+            <span class="text-[#173426]">Tree Of Life Global Missions</span>
+          </div>
+          <p class="text-[#525954] max-w-sm leading-relaxed">
+            비영리 글로벌 선교 기구로 국경 지역과 소외된 열방에 성경을 보급하고 하나님의 사랑을 실천합니다.
+          </p>
+          <p class="text-stone-400 text-[11px]">
+            Established in 1995 · 501(c)(3) Non-Profit Ministry
+          </p>
+        </div>
+
+        <div class="md:col-span-3 space-y-2">
+          <h4 class="text-[#173426] font-semibold tracking-wider text-[11px]">Contact & Location</h4>
+          <p class="text-[#525954]">📧 info@treeoflifemissions.org</p>
+          <p class="text-[#525954]">📍 Piedras Negras, Coahuila & Eagle Pass, TX</p>
+          <p class="text-[#525954]">🌐 www.treeoflifemissions.com</p>
+        </div>
+
+        <div class="md:col-span-4 space-y-2">
+          <h4 class="text-[#173426] font-semibold tracking-wider text-[11px]">Admin Access</h4>
+          <p class="text-[#525954] leading-relaxed">
+            사역 현장 사진 업로드 및 갤러리 관리 기능은 상단 우측의 관리자 모드를 통해 이용하실 수 있습니다.
+          </p>
+          <button onclick="handleAdminToggle()" class="text-[#173426] hover:underline text-[11px] pt-1 inline-block font-semibold">
+            관리자 모드 활성화 / 비활성화
+          </button>
+        </div>
+
+      </div>
+
+      <div class="pt-6 flex flex-col sm:flex-row items-center justify-between text-stone-400 text-[11px] gap-2">
+        <p>© 2026 Tree Of Life Global Missions. All rights reserved.</p>
+        <p>Built with Editorial Minimalism & Zero AI Slop Standard</p>
+      </div>
+
+    </div>
+  </footer>
+
+  <!-- ============================================== -->
+  <!-- MODAL 1: FULLSCREEN IMAGE LIGHTBOX             -->
+  <!-- ============================================== -->
+  <div id="lightbox-modal" class="hidden fixed inset-0 z-50 modal-backdrop p-6 flex items-center justify-center" onclick="galleryApp.closeLightbox()">
+    <div class="max-w-5xl w-full bg-paper rounded-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh] p-6" onclick="event.stopPropagation()">
+      
+      <!-- Top Bar -->
+      <div class="pb-4 border-b border-[#E2DDD4] flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <span id="lightbox-category" class="text-xs font-bold tracking-wider text-[#9E441B]"></span>
+          <span class="text-stone-300">|</span>
+          <span id="lightbox-counter" class="text-xs text-[#525954] font-medium"></span>
+        </div>
+        <button onclick="galleryApp.closeLightbox()" class="text-stone-500 hover:text-stone-900 p-1 rounded-md hover:bg-stone-200 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Main Image & Navigation Area -->
+      <div class="relative bg-stone-950 flex items-center justify-center overflow-hidden flex-1 min-h-[300px] sm:min-h-[420px] p-6 rounded-md my-4">
+        <img id="lightbox-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'%3E%3C/svg%3E" alt="Enlarged photo" class="max-h-[65vh] w-auto max-w-full object-contain" />
+        
+        <!-- Left Navigation Arrow -->
+        <button onclick="galleryApp.navigateLightbox(-1)" 
+                class="absolute left-4 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/90 text-white p-3 rounded-full transition-all"
+                title="이전 사진 (←)">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+          </svg>
+        </button>
+
+        <!-- Right Navigation Arrow -->
+        <button onclick="galleryApp.navigateLightbox(1)" 
+                class="absolute right-4 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/90 text-white p-3 rounded-full transition-all"
+                title="다음 사진 (→)">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Bottom Caption Bar -->
+      <div class="pt-2">
+        <h3 id="lightbox-title" class="font-serif text-xl font-bold text-[#173426]"></h3>
+        <p id="lightbox-caption" class="text-sm text-[#525954] mt-1.5 leading-relaxed"></p>
+        <p id="lightbox-meta" class="text-xs text-stone-400 mt-3"></p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL 2: ADMIN PHOTO UPLOAD MODAL              -->
+  <!-- ============================================== -->
+  <div id="upload-modal" class="hidden fixed inset-0 z-50 modal-backdrop p-6 flex items-center justify-center" onclick="closeUploadModal()">
+    <div class="max-w-xl w-full bg-paper rounded-lg overflow-hidden shadow-2xl border border-[#E2DDD4] max-h-[90vh] flex flex-col p-6" onclick="event.stopPropagation()">
+      
+      <!-- Modal Header -->
+      <div class="pb-4 border-b border-[#E2DDD4] flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">📸</span>
+          <h3 class="font-serif text-lg font-bold text-[#173426]">새 현장 사진 등록</h3>
+        </div>
+        <button onclick="closeUploadModal()" class="text-stone-500 hover:text-stone-900 p-1 rounded-md">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Upload Form Body -->
+      <form id="upload-form" class="pt-4 space-y-4 overflow-y-auto flex-1 text-[#141715]">
+        
+        <!-- Dropzone / File Select -->
+        <div>
+          <label class="block text-xs font-semibold text-[#141715] mb-1">사진 파일 첨부 (또는 드래그 앤 드롭) *</label>
+          <div id="dropzone" class="dropzone rounded-lg text-center cursor-pointer p-6">
+            <svg class="w-8 h-8 mx-auto text-stone-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+            </svg>
+            <p class="text-xs font-medium text-[#173426]">이곳을 클릭하거나 이미지 파일을 드래그하여 놓으세요</p>
+            <p class="text-[11px] text-stone-400 mt-1">JPG, PNG, WebP 지원</p>
+            <input type="file" id="file-input" accept="image/*" class="hidden" />
+          </div>
+
+          <!-- Uploaded Preview -->
+          <div id="upload-preview-container" class="hidden mt-3 p-4 bg-stone-100 rounded-md border border-stone-200 flex items-center gap-3">
+            <img id="upload-preview-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'%3E%3C/svg%3E" alt="Preview" class="w-16 h-16 object-cover rounded" />
+            <div class="text-xs text-[#141715]">
+              <span class="font-semibold text-green-700">✓ 사진 첨부 완료</span>
+              <p class="text-stone-500 text-[11px] mt-0.5">로컬 저장소에 영구 보존됩니다.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Or Image Web URL Input -->
+        <div>
+          <label class="block text-xs font-semibold text-[#141715] mb-1">또는 이미지 웹 URL 직접 입력</label>
+          <input type="url" id="image-url-input" placeholder="https://images.unsplash.com/..." 
+                 class="w-full px-3.5 py-2.5 bg-white border border-[#E2DDD4] rounded-md text-xs text-[#141715] focus:outline-none focus:border-[#173426]" />
+        </div>
+
+        <!-- Title -->
+        <div>
+          <label class="block text-xs font-semibold text-[#141715] mb-1">사진 제목 *</label>
+          <input type="text" id="photo-title" required placeholder="예: 2026 피에드라스 네그라스 성경 배포" 
+                 class="w-full px-3.5 py-2.5 bg-white border border-[#E2DDD4] rounded-md text-xs text-[#141715] focus:outline-none focus:border-[#173426]" />
+        </div>
+
+        <!-- Category & Date in 2 columns -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-[#141715] mb-1">카테고리 *</label>
+            <select id="photo-category" required class="w-full px-3.5 py-2.5 bg-white border border-[#E2DDD4] rounded-md text-xs focus:outline-none focus:border-[#173426]">
+              <option value="bibles">성경 배포</option>
+              <option value="outreach">사역 현장</option>
+              <option value="relief">구호 및 지원</option>
+              <option value="community">공동체 예배</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-[#141715] mb-1">촬영 일자 *</label>
+            <input type="date" id="photo-date" required 
+                   class="w-full px-3.5 py-2.5 bg-white border border-[#E2DDD4] rounded-md text-xs focus:outline-none focus:border-[#173426]" />
+          </div>
+        </div>
+
+        <!-- Location & Photographer in 2 columns -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-[#141715] mb-1">사역 장소</label>
+            <input type="text" id="photo-location" placeholder="예: 멕시코 코아우일라 국경" 
+                   class="w-full px-3.5 py-2.5 bg-white border border-[#E2DDD4] rounded-md text-xs focus:outline-none focus:border-[#173426]" />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-[#141715] mb-1">촬영자 / 제보자</label>
+            <input type="text" id="photo-author" placeholder="예: Don Crabtree" 
+                   class="w-full px-3.5 py-2.5 bg-white border border-[#E2DDD4] rounded-md text-xs focus:outline-none focus:border-[#173426]" />
+          </div>
+        </div>
+
+        <!-- Caption -->
+        <div>
+          <label class="block text-xs font-semibold text-[#141715] mb-1">현장 이야기 & 캡션 *</label>
+          <textarea id="photo-caption" required rows="3" placeholder="이 사진에 담긴 은혜로운 사역 이야기와 감사의 내용을 작성해주세요." 
+                    class="w-full px-3.5 py-2 bg-white border border-[#E2DDD4] rounded-md text-xs focus:outline-none focus:border-[#173426]"></textarea>
+        </div>
+
+        <div class="pt-4 border-t border-[#E2DDD4] flex items-center justify-end gap-3">
+          <button type="button" onclick="closeUploadModal()" class="px-4 py-2 text-xs text-stone-600 hover:bg-stone-200 rounded-md font-medium">
+            취소
+          </button>
+          <button type="submit" class="btn-primary px-5 py-2.5 rounded-md text-xs font-semibold shadow-sm">
+            갤러리에 등록하기
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL 3: DONATION QUICK MODAL                  -->
+  <!-- ============================================== -->
+  <div id="donate-modal" class="hidden fixed inset-0 z-50 modal-backdrop p-6 flex items-center justify-center" onclick="closeDonateModal()">
+    <div class="max-w-md w-full bg-paper rounded-lg overflow-hidden shadow-2xl border border-[#E2DDD4] p-6" onclick="event.stopPropagation()">
+      <div class="pb-4 border-b border-[#E2DDD4] flex items-center justify-between">
+        <h3 class="font-serif text-lg font-bold text-[#173426]">🌿 선교 후원 동참하기</h3>
+        <button onclick="closeDonateModal()" class="text-stone-500 hover:text-stone-900 p-1">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <div class="pt-4 space-y-4 text-[#141715]">
+        <p class="text-xs text-[#525954] leading-relaxed">
+          국경 지역 선교와 성경 보급을 위한 후원에 감사드립니다. 계좌 이체 또는 전용 안내를 통해 동참하실 수 있습니다.
+        </p>
+
+        <div class="p-4 bg-[#F4F0E8] rounded-md text-xs space-y-1.5 text-[#173426]">
+          <p class="font-bold">🏦 공식 후원 계좌 안내</p>
+          <p>• 예금주: Tree Of Life Global Missions</p>
+          <p>• 계좌번호: (문의 시 전용 안내 발송)</p>
+          <p>• 공식 이메일: info@treeoflifemissions.org</p>
+        </div>
+
+        <a href="#how-to-give" onclick="closeDonateModal()" class="w-full btn-accent py-3 rounded-md text-xs font-semibold text-center block shadow-sm">
+          온라인 후원 신청서 작성하러 가기
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/mock-data.js"></script>
+  <script src="js/gallery.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
