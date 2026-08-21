@@ -54,10 +54,17 @@ class HeadroomOptimizer:
         try:
             res = self._headroom.compress(messages)
             if hasattr(res, 'messages') and isinstance(res.messages, list):
-                saved = getattr(res, 'tokens_saved', 0)
-                if saved > 0:
-                    logger.info(f"[Headroom-AI] Optimized context: saved {saved} tokens.")
-                return res.messages
+                clean_res = []
+                for m in res.messages:
+                    if isinstance(m, dict) and "role" in m and "content" in m:
+                        clean_res.append({"role": str(m["role"]), "content": str(m["content"])})
+                    elif hasattr(m, "role") and hasattr(m, "content"):
+                        clean_res.append({"role": str(m.role), "content": str(m.content)})
+                if clean_res:
+                    saved = getattr(res, 'tokens_saved', 0)
+                    if saved > 0:
+                        logger.info(f"[Headroom-AI] Optimized context: saved {saved} tokens.")
+                    return clean_res
             return messages
         except Exception as e:
             logger.debug(f"[Headroom-AI] Message optimization pass-through: {e}")
@@ -810,11 +817,18 @@ class CompanyOrchestrator:
 
                 raise last_error or Exception("All Cerebras & Groq API candidates exhausted.")
 
-            # LLM 메시지 조립
-            full_messages = [
+            # LLM 메시지 조립 및 엄격한 딕셔너리 포맷 정제
+            raw_messages = [
                 {"role": "system", "content": system_prompt},
                 *optimized_history
             ]
+            full_messages: List[Dict[str, str]] = []
+            for m in raw_messages:
+                if isinstance(m, dict) and "role" in m and "content" in m:
+                    full_messages.append({"role": str(m["role"]), "content": str(m["content"])})
+                elif hasattr(m, "role") and hasattr(m, "content"):
+                    full_messages.append({"role": str(m.role), "content": str(m.content)})
+
             output_text = _call_llm_with_fallback(full_messages)
 
             # 2. Tool 실행 루프: 도구 결과를 LLM에 재전달 (최대 3회)
@@ -823,7 +837,7 @@ class CompanyOrchestrator:
                 if not tool_output:
                     break
                 # 도구 결과를 포함하여 LLM 재호출
-                full_messages.append({"role": "assistant", "content": output_text})
+                full_messages.append({"role": "assistant", "content": str(output_text)})
                 full_messages.append({"role": "user", "content": f"[도구 실행 결과]\n{tool_output}\n\n위 도구 실행 결과를 바탕으로 답변을 완성해 주세요."})
                 output_text = _call_llm_with_fallback(full_messages)
 
@@ -1049,11 +1063,19 @@ class CompanyOrchestrator:
 
         results = []
         for tool_name, arg_str in tool_matches:
-            # key="value" or key=value 파싱 (3개 그룹 정규식 매칭)
-            matches = re.findall(r'(\w+)=(?:"([^"]*)"|(\S+))', arg_str)
-            clean_args = {k: (v1 if v1 != '' else v2) for k, v1, v2 in matches}
-            res = self.execute_tool(tool_name, **clean_args)
-            results.append(f"• `{tool_name}`: ```{json.dumps(res, ensure_ascii=False, indent=2)}```")
+            try:
+                # key="value" or key='value' or key=value 안전 파싱
+                clean_args = {}
+                for m in re.finditer(r'(\w+)=(?:"([^"]*)"|\'([^\']*)\'|(\S+))', arg_str):
+                    k = m.group(1)
+                    v = m.group(2) if m.group(2) is not None else (m.group(3) if m.group(3) is not None else m.group(4))
+                    clean_args[k] = v or ""
+                
+                res = self.execute_tool(tool_name, **clean_args)
+                results.append(f"• `{tool_name}`: ```{json.dumps(res, ensure_ascii=False, indent=2)}```")
+            except Exception as tool_err:
+                logger.error(f"Tool {tool_name} error: {tool_err}")
+                results.append(f"• `{tool_name}` 실행 실패: {tool_err}")
 
         return "\n".join(results)
 
