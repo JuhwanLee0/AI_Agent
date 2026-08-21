@@ -157,7 +157,7 @@ class ClaudeMemManager:
             from openai import OpenAI
             client = OpenAI(api_key=groq_key, base_url="https://api.groq.com/openai/v1", timeout=8.0)
             res = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="openai/gpt-oss-20b",
                 messages=[
                     {"role": "system", "content": "You are a concise memory compressor. Extract exactly 1-2 Korean sentences summarizing the key decisions, architectural rules, or deliverables from this agent output. Output only the summarized text without preamble."},
                     {"role": "user", "content": full_text[:3000]}
@@ -472,30 +472,30 @@ class AgentConfig:
 
 
 AGENTS: Dict[str, AgentConfig] = {
-    # 경영진 (CEO)
-    "CEO": AgentConfig("CEO", "최고경영자", "executive", "ceo_instruction.md", "CEREBRAS_API_KEY_1", "MODEL_CEO", "cerebras/gpt-oss-120bProduction", "briefcase"),
+    # 경영진 (CEO - Qwen 27B)
+    "CEO": AgentConfig("CEO", "최고경영자", "executive", "ceo_instruction.md", "GROQ_API_KEY_1", "MODEL_CEO", "groq/qwen/qwen3.6-27b", "briefcase"),
     
-    # 개발본부 (개발사원은 팀장과 동일한 Key 2 및 MODEL_MANAGER 적용)
-    "개발팀장": AgentConfig("개발팀장", "Technical Lead & Scrum Master", "dev", "dev_instruction.md", "CEREBRAS_API_KEY_2", "MODEL_MANAGER", "cerebras/gpt-oss-120bProduction", "hammer_and_wrench"),
-    "개발_사원A": AgentConfig("개발_사원A", "System Architect", "dev", "dev_instruction.md", "CEREBRAS_API_KEY_2", "MODEL_MANAGER", "cerebras/gpt-oss-120bProduction", "building_construction"),
-    "개발_사원B": AgentConfig("개발_사원B", "Backend & Data Engineer / Security", "dev", "dev_instruction.md", "CEREBRAS_API_KEY_2", "MODEL_MANAGER", "cerebras/gpt-oss-120bProduction", "shield"),
-    "개발_사원C": AgentConfig("개발_사원C", "Frontend & UI / Payment UX", "dev", "dev_instruction.md", "CEREBRAS_API_KEY_2", "MODEL_MANAGER", "cerebras/gpt-oss-120bProduction", "credit_card"),
-    "개발_사원D": AgentConfig("개발_사원D", "QA & Penetration Engineer", "dev", "dev_instruction.md", "CEREBRAS_API_KEY_2", "MODEL_MANAGER", "cerebras/gpt-oss-120bProduction", "mag"),
-    "개발_사원E": AgentConfig("개발_사원E", "DevOps & Infra Engineer", "dev", "dev_instruction.md", "CEREBRAS_API_KEY_2", "MODEL_MANAGER", "cerebras/gpt-oss-120bProduction", "cloud"),
+    # 개발본부 (Qwen 27B 풀스택 코딩)
+    "개발팀장": AgentConfig("개발팀장", "Technical Lead & Scrum Master", "dev", "dev_instruction.md", "GROQ_API_KEY_2", "MODEL_MANAGER", "groq/qwen/qwen3.6-27b", "hammer_and_wrench"),
+    "개발_사원A": AgentConfig("개발_사원A", "System Architect", "dev", "dev_instruction.md", "GROQ_API_KEY_2", "MODEL_MANAGER", "groq/qwen/qwen3.6-27b", "building_construction"),
+    "개발_사원B": AgentConfig("개발_사원B", "Backend & Data Engineer / Security", "dev", "dev_instruction.md", "GROQ_API_KEY_2", "MODEL_MANAGER", "groq/qwen/qwen3.6-27b", "shield"),
+    "개발_사원C": AgentConfig("개발_사원C", "Frontend & UI / Payment UX", "dev", "dev_instruction.md", "GROQ_API_KEY_2", "MODEL_MANAGER", "groq/qwen/qwen3.6-27b", "credit_card"),
+    "개발_사원D": AgentConfig("개발_사원D", "QA & Penetration Engineer", "dev", "dev_instruction.md", "GROQ_API_KEY_2", "MODEL_MANAGER", "groq/qwen/qwen3.6-27b", "mag"),
+    "개발_사원E": AgentConfig("개발_사원E", "DevOps & Infra Engineer", "dev", "dev_instruction.md", "GROQ_API_KEY_2", "MODEL_MANAGER", "groq/qwen/qwen3.6-27b", "cloud"),
 
-    # 마케팅본부
-    "마케팅팀장": AgentConfig("마케팅팀장", "Marketing Director", "marketing", "marketing_instruction.md", "CEREBRAS_API_KEY_3", "MODEL_MANAGER", "cerebras/gpt-oss-120bProduction", "chart_with_upwards_trend"),
-    "마케팅_사원A": AgentConfig("마케팅_사원A", "Trend & Material Analyst", "marketing", "marketing_instruction.md", "CEREBRAS_API_KEY_3", "MODEL_WORKER", "cerebras/gemma-4-31bPreview", "telescope"),
-    "마케팅_사원B": AgentConfig("마케팅_사원B", "Content Architect (3막 8장)", "marketing", "marketing_instruction.md", "CEREBRAS_API_KEY_3", "MODEL_WORKER", "cerebras/gemma-4-31bPreview", "scroll"),
-    "마케팅_사원C": AgentConfig("마케팅_사원C", "Detail Copywriter & CTA", "marketing", "marketing_instruction.md", "CEREBRAS_API_KEY_3", "MODEL_WORKER", "cerebras/gemma-4-31bPreview", "pen"),
-    "마케팅_사원D": AgentConfig("마케팅_사원D", "Visual Prompt Engineer", "marketing", "marketing_instruction.md", "CEREBRAS_API_KEY_3", "MODEL_WORKER", "cerebras/gemma-4-31bPreview", "art"),
+    # 마케팅본부 (20B 초고속 카피라이팅)
+    "마케팅팀장": AgentConfig("마케팅팀장", "Marketing Director", "marketing", "marketing_instruction.md", "GROQ_API_KEY_3", "MODEL_MANAGER", "groq/qwen/qwen3.6-27b", "chart_with_upwards_trend"),
+    "마케팅_사원A": AgentConfig("마케팅_사원A", "Trend & Material Analyst", "marketing", "marketing_instruction.md", "GROQ_API_KEY_3", "MODEL_WORKER", "groq/openai/gpt-oss-20b", "telescope"),
+    "마케팅_사원B": AgentConfig("마케팅_사원B", "Content Architect (3막 8장)", "marketing", "marketing_instruction.md", "GROQ_API_KEY_3", "MODEL_WORKER", "groq/openai/gpt-oss-20b", "scroll"),
+    "마케팅_사원C": AgentConfig("마케팅_사원C", "Detail Copywriter & CTA", "marketing", "marketing_instruction.md", "GROQ_API_KEY_3", "MODEL_WORKER", "groq/openai/gpt-oss-20b", "pen"),
+    "마케팅_사원D": AgentConfig("마케팅_사원D", "Visual Prompt Engineer", "marketing", "marketing_instruction.md", "GROQ_API_KEY_3", "MODEL_WORKER", "groq/openai/gpt-oss-20b", "art"),
 
     # 미디어본부
-    "미디어팀장": AgentConfig("미디어팀장", "Technical Director", "media", "media_instruction.md", "CEREBRAS_API_KEY_3", "MODEL_MANAGER", "cerebras/gpt-oss-120bProduction", "movie_camera"),
-    "미디어_사원A": AgentConfig("미디어_사원A", "Dual-Engine Audio Specialist", "media", "media_instruction.md", "CEREBRAS_API_KEY_3", "MODEL_WORKER", "cerebras/gemma-4-31bPreview", "sound"),
-    "미디어_사원B": AgentConfig("미디어_사원B", "Visual & Browser Automation Specialist", "media", "media_instruction.md", "CEREBRAS_API_KEY_3", "MODEL_WORKER", "cerebras/gemma-4-31bPreview", "globe_with_meridians"),
-    "미디어_사원C": AgentConfig("미디어_사원C", "Compositor & Video Editor", "media", "media_instruction.md", "CEREBRAS_API_KEY_3", "MODEL_WORKER", "cerebras/gemma-4-31bPreview", "clapper"),
-    "미디어_사원D": AgentConfig("미디어_사원D", "Platform Staging & Slack Messenger", "media", "media_instruction.md", "CEREBRAS_API_KEY_3", "MODEL_WORKER", "cerebras/gemma-4-31bPreview", "package"),
+    "미디어팀장": AgentConfig("미디어팀장", "Technical Director", "media", "media_instruction.md", "GROQ_API_KEY_3", "MODEL_MANAGER", "groq/qwen/qwen3.6-27b", "movie_camera"),
+    "미디어_사원A": AgentConfig("미디어_사원A", "Dual-Engine Audio Specialist", "media", "media_instruction.md", "GROQ_API_KEY_3", "MODEL_WORKER", "groq/openai/gpt-oss-20b", "sound"),
+    "미디어_사원B": AgentConfig("미디어_사원B", "Visual & Browser Automation Specialist", "media", "media_instruction.md", "GROQ_API_KEY_3", "MODEL_WORKER", "groq/openai/gpt-oss-20b", "globe_with_meridians"),
+    "미디어_사원C": AgentConfig("미디어_사원C", "Compositor & Video Editor", "media", "media_instruction.md", "GROQ_API_KEY_3", "MODEL_WORKER", "groq/openai/gpt-oss-20b", "clapper"),
+    "미디어_사원D": AgentConfig("미디어_사원D", "Platform Staging & Slack Messenger", "media", "media_instruction.md", "GROQ_API_KEY_3", "MODEL_WORKER", "groq/openai/gpt-oss-20b", "package"),
 }
 
 
@@ -615,14 +615,14 @@ class CompanyOrchestrator:
         common_path = os.path.join(INSTRUCTIONS_DIR, "instruction.md")
         if os.path.exists(common_path):
             with open(common_path, "r", encoding="utf-8") as f:
-                common_handoff = f.read()
+                common_handoff = f.read()[:2000]
 
         # [2. 부서 및 직무 지침서]
         agent_instruction = ""
         inst_path = os.path.join(INSTRUCTIONS_DIR, config.instruction_file)
         if os.path.exists(inst_path):
             with open(inst_path, "r", encoding="utf-8") as f:
-                agent_instruction = f.read()
+                agent_instruction = f.read()[:2500]
 
         # [3. Claude-Mem 장기 기억 컨텍스트]
         mem_context = self.claude_mem.get_memory_context(config.department, agent_name)
@@ -641,7 +641,7 @@ class CompanyOrchestrator:
 
         raw_prompt = f"""
 [절대 최우선 행동 지침 - 5-LAYER INTELLIGENCE COMPLIANCE]
-당신은 모든 판단과 작업 수행 시 아래 'instruction.md'와 전사 5대 지능 엔진(Headroom-AI, Claude-Mem, GSD, Graphify, Ponytail)의 원칙을 최우선 기준으로 엄격히 준수하여 일해야 합니다.
+당신은 모든 판단과 작업 수행 시 아래 instruction 및 5대 지능 엔진(Headroom-AI, Claude-Mem, GSD, Graphify, Ponytail)의 원칙을 최우선 기준으로 준수합니다.
 
 ==================================================
 [1. 전사 공통 지침: instruction.md]
@@ -659,29 +659,18 @@ class CompanyOrchestrator:
 ==================================================
 
 ==================================================
-[4. GSD 실행 상태 및 디스패치 가이드]
+[4. GSD 실행 상태 및 Ponytail 규율]
 {gsd_context}
-==================================================
-
-==================================================
-[5. Graphify 아키텍처 관계]
-{graph_context}
-==================================================
-
-==================================================
-[6. Ponytail 실용주의(YAGNI) 규율]
 {ponytail_context}
 ==================================================
 
 {skills_text}
 
-[당신의 현재 역할 정보]
-이름: {config.name}
-직책: {config.role}
-부서: {config.department}
+[당신의 역할]
+이름: {config.name} | 직책: {config.role} | 부서: {config.department}
 
-[필수 출력 형식 준수]
-답변 시 항상 instruction.md에 명시된 인수인계 양식(@다음담당자 태그, 내 작업 요약, 경영진/팀장 핵심 주의사항 요약, 구체적 액션 아이템, 승인 게이트)을 단 1개의 누락 없이 엄격하게 작성하십시오.
+[출력 형식]
+답변 시 항상 instruction.md에 명시된 인수인계 양식(@다음담당자 태그, 작업 요약, 핵심 주의사항, 액션 아이템)을 명확하게 작성하십시오.
 """
         optimized_prompt = self.headroom.optimize_text(raw_prompt)
         return optimized_prompt.strip()
