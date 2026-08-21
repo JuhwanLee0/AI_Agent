@@ -5,7 +5,7 @@ import time
 import logging
 import threading
 import subprocess
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -384,7 +384,7 @@ class AgentConfig:
         instruction_file: str,
         api_key_env: str,
         model_env: str = "MODEL_MANAGER",
-        default_model: str = "gemini-2.5-flash",
+        default_model: str = "cerebras/gpt-oss-120bProduction",
         avatar_name: str = "robot"
     ):
         self.name = name
@@ -397,56 +397,70 @@ class AgentConfig:
         self.avatar_name = avatar_name
 
     @property
-    def api_key(self) -> str:
-        # 1. 역할/직급별 키 1, 2, 3 우선 조회
-        if self.model_env == "MODEL_CEO" or self.role == "최고경영자":
-            key = os.getenv("GEMINI_API_KEY_1") or os.getenv("GEMINI_API_KEY_CEO")
-        elif self.department == "dev" or self.model_env == "MODEL_MANAGER" or "팀장" in self.name:
-            # 개발본부(개발팀장 + 개발_사원A~E) 및 모든 팀장 -> Key 2 사용
-            key = os.getenv("GEMINI_API_KEY_2") or os.getenv("GEMINI_API_KEY_DEV") or os.getenv(self.api_key_env)
-        else:  # 일반 실무 사원 (마케팅/미디어 사원 등) -> Key 3 사용
-            key = os.getenv("GEMINI_API_KEY_3") or os.getenv(self.api_key_env)
-        
-        # 2. 폴백: 기본 GEMINI_API_KEY 또는 GOOGLE_API_KEY
-        return (key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY", "")).strip()
+    def model_name(self) -> str:
+        raw = os.getenv(self.model_env, self.default_model).strip()
+        return raw or self.default_model
+
+    def get_provider_and_model(self) -> Tuple[str, str]:
+        """모델명에 따라 cerebras / groq 프로바이더 및 실제 모델 ID 분리"""
+        full_model = self.model_name
+        if full_model.startswith("cerebras/"):
+            return "cerebras", full_model.replace("cerebras/", "")
+        elif full_model.startswith("groq/"):
+            return "groq", full_model.replace("groq/", "")
+        elif any(k in full_model.lower() for k in ["gemma", "production"]):
+            return "cerebras", full_model
+        elif any(k in full_model.lower() for k in ["qwen", "compound", "prompt-guard"]):
+            return "groq", full_model
+        else:
+            return "cerebras", full_model
 
     @property
-    def model_name(self) -> str:
-        raw = os.getenv(self.model_env, self.default_model).strip().lower()
-        if raw in ("3.5-lite", "3.5 lite", "3.5_lite", "lite", "gemini-3.5-lite", "gemini-2.0-flash-lite", "flash-lite", "2.0-flash-lite"):
-            return "gemini-3.6-flash"
-        elif raw in ("3.6", "3.6 flash", "3.6-flash", "3.7", "3.7 flash", "gemini-3.6", "gemini-3.6-flash", "gemini-2.5-flash", "2.5-flash", "flash", "gemini-2.0-flash", "2.0-flash"):
-            return "gemini-3.6-flash"
-        elif raw in ("3.5", "3.5 flash", "3.5-flash", "gemini-3.5", "gemini-3.5-flash"):
-            return "gemini-3.6-flash"
-        return raw or "gemini-3.6-flash"
+    def api_key(self) -> str:
+        provider, _ = self.get_provider_and_model()
+        if provider == "cerebras":
+            if self.model_env == "MODEL_CEO" or self.role == "최고경영자":
+                key = os.getenv("CEREBRAS_API_KEY_1") or os.getenv("CEREBRAS_API_KEY")
+            elif self.department == "dev" or self.model_env == "MODEL_MANAGER" or "팀장" in self.name:
+                key = os.getenv("CEREBRAS_API_KEY_2") or os.getenv("CEREBRAS_API_KEY")
+            else:
+                key = os.getenv("CEREBRAS_API_KEY_3") or os.getenv("CEREBRAS_API_KEY")
+            return (key or os.getenv("CEREBRAS_API_KEY", "")).strip()
+        else:  # groq
+            if self.model_env == "MODEL_CEO" or self.role == "최고경영자":
+                key = os.getenv("GROQ_API_KEY_1") or os.getenv("GROQ_API_KEY")
+            elif self.department == "dev" or self.model_env == "MODEL_MANAGER" or "팀장" in self.name:
+                key = os.getenv("GROQ_API_KEY_2") or os.getenv("GROQ_API_KEY")
+            else:
+                key = os.getenv("GROQ_API_KEY_3") or os.getenv("GROQ_API_KEY")
+            return (key or os.getenv("GROQ_API_KEY", "")).strip()
 
 
 AGENTS: Dict[str, AgentConfig] = {
     # 경영진 (CEO)
-    "CEO": AgentConfig("CEO", "최고경영자", "executive", "ceo_instruction.md", "GEMINI_API_KEY_CEO", "MODEL_CEO", "gemini-2.5-flash", "briefcase"),
+    "CEO": AgentConfig("CEO", "최고경영자", "executive", "ceo_instruction.md", "CEREBRAS_API_KEY_1", "MODEL_CEO", "cerebras/gpt-oss-120bProduction", "briefcase"),
     
     # 개발본부 (개발사원은 팀장과 동일한 Key 2 및 MODEL_MANAGER 적용)
-    "개발팀장": AgentConfig("개발팀장", "Technical Lead & Scrum Master", "dev", "dev_instruction.md", "GEMINI_API_KEY_DEV", "MODEL_MANAGER", "gemini-2.5-flash", "hammer_and_wrench"),
-    "개발_사원A": AgentConfig("개발_사원A", "System Architect", "dev", "dev_instruction.md", "GEMINI_API_KEY_DEV", "MODEL_MANAGER", "gemini-2.5-flash", "building_construction"),
-    "개발_사원B": AgentConfig("개발_사원B", "Backend & Data Engineer / Security", "dev", "dev_instruction.md", "GEMINI_API_KEY_DEV", "MODEL_MANAGER", "gemini-2.5-flash", "shield"),
-    "개발_사원C": AgentConfig("개발_사원C", "Frontend & UI / Payment UX", "dev", "dev_instruction.md", "GEMINI_API_KEY_DEV", "MODEL_MANAGER", "gemini-2.5-flash", "credit_card"),
-    "개발_사원D": AgentConfig("개발_사원D", "QA & Penetration Engineer", "dev", "dev_instruction.md", "GEMINI_API_KEY_DEV", "MODEL_MANAGER", "gemini-2.5-flash", "mag"),
-    "개발_사원E": AgentConfig("개발_사원E", "DevOps & Infra Engineer", "dev", "dev_instruction.md", "GEMINI_API_KEY_DEV", "MODEL_MANAGER", "gemini-2.5-flash", "cloud"),
+    "개발팀장": AgentConfig("개발팀장", "Technical Lead & Scrum Master", "dev", "dev_instruction.md", "CEREBRAS_API_KEY_2", "MODEL_MANAGER", "cerebras/gpt-oss-120bProduction", "hammer_and_wrench"),
+    "개발_사원A": AgentConfig("개발_사원A", "System Architect", "dev", "dev_instruction.md", "CEREBRAS_API_KEY_2", "MODEL_MANAGER", "cerebras/gpt-oss-120bProduction", "building_construction"),
+    "개발_사원B": AgentConfig("개발_사원B", "Backend & Data Engineer / Security", "dev", "dev_instruction.md", "CEREBRAS_API_KEY_2", "MODEL_MANAGER", "cerebras/gpt-oss-120bProduction", "shield"),
+    "개발_사원C": AgentConfig("개발_사원C", "Frontend & UI / Payment UX", "dev", "dev_instruction.md", "CEREBRAS_API_KEY_2", "MODEL_MANAGER", "cerebras/gpt-oss-120bProduction", "credit_card"),
+    "개발_사원D": AgentConfig("개발_사원D", "QA & Penetration Engineer", "dev", "dev_instruction.md", "CEREBRAS_API_KEY_2", "MODEL_MANAGER", "cerebras/gpt-oss-120bProduction", "mag"),
+    "개발_사원E": AgentConfig("개발_사원E", "DevOps & Infra Engineer", "dev", "dev_instruction.md", "CEREBRAS_API_KEY_2", "MODEL_MANAGER", "cerebras/gpt-oss-120bProduction", "cloud"),
 
     # 마케팅본부
-    "마케팅팀장": AgentConfig("마케팅팀장", "Marketing Director", "marketing", "marketing_instruction.md", "GEMINI_API_KEY_MARKETING", "MODEL_MANAGER", "gemini-2.5-flash", "chart_with_upwards_trend"),
-    "마케팅_사원A": AgentConfig("마케팅_사원A", "Trend & Material Analyst", "marketing", "marketing_instruction.md", "GEMINI_API_KEY_MARKETING", "MODEL_WORKER", "gemini-2.5-flash", "telescope"),
-    "마케팅_사원B": AgentConfig("마케팅_사원B", "Content Architect (3막 8장)", "marketing", "marketing_instruction.md", "GEMINI_API_KEY_MARKETING", "MODEL_WORKER", "gemini-2.5-flash", "scroll"),
-    "마케팅_사원C": AgentConfig("마케팅_사원C", "Detail Copywriter & CTA", "marketing", "marketing_instruction.md", "GEMINI_API_KEY_MARKETING", "MODEL_WORKER", "gemini-2.5-flash", "pen"),
-    "마케팅_사원D": AgentConfig("마케팅_사원D", "Visual Prompt Engineer", "marketing", "marketing_instruction.md", "GEMINI_API_KEY_MARKETING", "MODEL_WORKER", "gemini-2.5-flash", "art"),
+    "마케팅팀장": AgentConfig("마케팅팀장", "Marketing Director", "marketing", "marketing_instruction.md", "CEREBRAS_API_KEY_3", "MODEL_MANAGER", "cerebras/gpt-oss-120bProduction", "chart_with_upwards_trend"),
+    "마케팅_사원A": AgentConfig("마케팅_사원A", "Trend & Material Analyst", "marketing", "marketing_instruction.md", "CEREBRAS_API_KEY_3", "MODEL_WORKER", "cerebras/gemma-4-31bPreview", "telescope"),
+    "마케팅_사원B": AgentConfig("마케팅_사원B", "Content Architect (3막 8장)", "marketing", "marketing_instruction.md", "CEREBRAS_API_KEY_3", "MODEL_WORKER", "cerebras/gemma-4-31bPreview", "scroll"),
+    "마케팅_사원C": AgentConfig("마케팅_사원C", "Detail Copywriter & CTA", "marketing", "marketing_instruction.md", "CEREBRAS_API_KEY_3", "MODEL_WORKER", "cerebras/gemma-4-31bPreview", "pen"),
+    "마케팅_사원D": AgentConfig("마케팅_사원D", "Visual Prompt Engineer", "marketing", "marketing_instruction.md", "CEREBRAS_API_KEY_3", "MODEL_WORKER", "cerebras/gemma-4-31bPreview", "art"),
 
     # 미디어본부
-    "미디어팀장": AgentConfig("미디어팀장", "Technical Director", "media", "media_instruction.md", "GEMINI_API_KEY_MEDIA", "MODEL_MANAGER", "gemini-2.5-flash", "movie_camera"),
-    "미디어_사원A": AgentConfig("미디어_사원A", "Dual-Engine Audio Specialist", "media", "media_instruction.md", "GEMINI_API_KEY_MEDIA", "MODEL_WORKER", "gemini-2.5-flash", "sound"),
-    "미디어_사원B": AgentConfig("미디어_사원B", "Visual & Browser Automation Specialist", "media", "media_instruction.md", "GEMINI_API_KEY_MEDIA", "MODEL_WORKER", "gemini-2.5-flash", "globe_with_meridians"),
-    "미디어_사원C": AgentConfig("미디어_사원C", "Compositor & Video Editor", "media", "media_instruction.md", "GEMINI_API_KEY_MEDIA", "MODEL_WORKER", "gemini-2.5-flash", "clapper"),
-    "미디어_사원D": AgentConfig("미디어_사원D", "Platform Staging & Slack Messenger", "media", "media_instruction.md", "GEMINI_API_KEY_MEDIA", "MODEL_WORKER", "gemini-2.5-flash", "package"),
+    "미디어팀장": AgentConfig("미디어팀장", "Technical Director", "media", "media_instruction.md", "CEREBRAS_API_KEY_3", "MODEL_MANAGER", "cerebras/gpt-oss-120bProduction", "movie_camera"),
+    "미디어_사원A": AgentConfig("미디어_사원A", "Dual-Engine Audio Specialist", "media", "media_instruction.md", "CEREBRAS_API_KEY_3", "MODEL_WORKER", "cerebras/gemma-4-31bPreview", "sound"),
+    "미디어_사원B": AgentConfig("미디어_사원B", "Visual & Browser Automation Specialist", "media", "media_instruction.md", "CEREBRAS_API_KEY_3", "MODEL_WORKER", "cerebras/gemma-4-31bPreview", "globe_with_meridians"),
+    "미디어_사원C": AgentConfig("미디어_사원C", "Compositor & Video Editor", "media", "media_instruction.md", "CEREBRAS_API_KEY_3", "MODEL_WORKER", "cerebras/gemma-4-31bPreview", "clapper"),
+    "미디어_사원D": AgentConfig("미디어_사원D", "Platform Staging & Slack Messenger", "media", "media_instruction.md", "CEREBRAS_API_KEY_3", "MODEL_WORKER", "cerebras/gemma-4-31bPreview", "package"),
 }
 
 
@@ -657,27 +671,14 @@ class CompanyOrchestrator:
 
     def _load_skills(self, department: str, agent_name: str) -> str:
         skills = []
-        global_dir = os.path.join(SKILLS_DIR, "global")
-        if os.path.exists(global_dir):
-            for fname in sorted(os.listdir(global_dir)):
-                if fname.endswith(".md"):
-                    with open(os.path.join(global_dir, fname), "r", encoding="utf-8") as f:
-                        skills.append(f"### [Global Skill: {fname}]\n" + f.read())
-
         dept_dir = os.path.join(SKILLS_DIR, department)
         if os.path.exists(dept_dir):
-            target_files = self.AGENT_SKILL_MAPPING.get(agent_name)
-            if target_files:
-                for fname in target_files:
-                    fpath = os.path.join(dept_dir, fname)
-                    if os.path.exists(fpath):
-                        with open(fpath, "r", encoding="utf-8") as f:
-                            skills.append(f"### [Role Skill ({agent_name}): {fname}]\n" + f.read())
-            else:
-                for fname in sorted(os.listdir(dept_dir)):
-                    if fname.endswith(".md"):
-                        with open(os.path.join(dept_dir, fname), "r", encoding="utf-8") as f:
-                            skills.append(f"### [Department Skill ({department}): {fname}]\n" + f.read())
+            target_files = self.AGENT_SKILL_MAPPING.get(agent_name, [])
+            for fname in target_files:
+                fpath = os.path.join(dept_dir, fname)
+                if os.path.exists(fpath):
+                    with open(fpath, "r", encoding="utf-8") as f:
+                        skills.append(f"### [Role Skill ({agent_name}): {fname}]\n" + f.read()[:1500])
 
         if not skills:
             return ""
@@ -694,15 +695,68 @@ class CompanyOrchestrator:
                 return agent_name
         return None
 
-    def get_candidate_keys(self, agent_name: str) -> List[str]:
-        """주요 키 및 폴백 키 목록 추출 (중복 제거)"""
+    def get_client_candidates(self, agent_name: str) -> List[Dict[str, Any]]:
+        """에이전트 설정에 따라 주력 모델 및 서브(폴백) 모델 후보 목록 추출"""
         config = AGENTS.get(agent_name)
-        primary_key = config.api_key if config else ""
-        candidates = [primary_key] if primary_key else []
-        for env_var in ["GEMINI_API_KEY_1", "GEMINI_API_KEY_2", "GEMINI_API_KEY_3", "GEMINI_API_KEY", "GOOGLE_API_KEY"]:
-            val = os.getenv(env_var, "").strip()
-            if val and val not in candidates:
-                candidates.append(val)
+        if not config:
+            return []
+            
+        provider, model_id = config.get_provider_and_model()
+        cerebras_key = (os.getenv("CEREBRAS_API_KEY_1") or os.getenv("CEREBRAS_API_KEY_2") or os.getenv("CEREBRAS_API_KEY_3") or os.getenv("CEREBRAS_API_KEY", "")).strip()
+        groq_key = (os.getenv("GROQ_API_KEY_1") or os.getenv("GROQ_API_KEY_2") or os.getenv("GROQ_API_KEY_3") or os.getenv("GROQ_API_KEY", "")).strip()
+        
+        # .env에 지정된 서브 모델 (MODEL_CEO_SUB, MODEL_MANAGER_SUB, MODEL_WORKER_SUB)
+        sub_model_env = f"{config.model_env}_SUB"
+        custom_sub_model = os.getenv(sub_model_env, "").strip()
+        
+        candidates = []
+        
+        # 1. [주력 모델] (Primary Model)
+        if provider == "cerebras" and cerebras_key:
+            candidates.append({
+                "provider": "Cerebras (주력)",
+                "base_url": "https://api.cerebras.ai/v1",
+                "api_key": cerebras_key,
+                "model": model_id
+            })
+        elif provider == "groq" and groq_key:
+            candidates.append({
+                "provider": "Groq (주력)",
+                "base_url": "https://api.groq.com/openai/v1",
+                "api_key": groq_key,
+                "model": model_id
+            })
+            
+        # 2. [서브 / 폴백 모델] (Sub / Fallback Model)
+        if custom_sub_model:
+            sub_p = "cerebras" if custom_sub_model.startswith("cerebras/") or "gemma" in custom_sub_model.lower() else "groq"
+            sub_m = custom_sub_model.replace("cerebras/", "").replace("groq/", "")
+            sub_key = cerebras_key if sub_p == "cerebras" else groq_key
+            if sub_key:
+                candidates.append({
+                    "provider": f"{sub_p.capitalize()} (서브)",
+                    "base_url": "https://api.cerebras.ai/v1" if sub_p == "cerebras" else "https://api.groq.com/openai/v1",
+                    "api_key": sub_key,
+                    "model": sub_m
+                })
+        else:
+            # 기본 서브 모델 자동 구성
+            if groq_key and provider != "groq":
+                default_groq_sub = "compound" if config.model_env == "MODEL_CEO" else ("qwen/qwen3.6-27b" if "dev" in config.department else "openai/gpt-oss-20b")
+                candidates.append({
+                    "provider": "Groq (서브)",
+                    "base_url": "https://api.groq.com/openai/v1",
+                    "api_key": groq_key,
+                    "model": default_groq_sub
+                })
+            elif cerebras_key and provider != "cerebras":
+                candidates.append({
+                    "provider": "Cerebras (서브)",
+                    "base_url": "https://api.cerebras.ai/v1",
+                    "api_key": cerebras_key,
+                    "model": "gpt-oss-120bProduction"
+                })
+            
         return candidates
 
     def call_agent_llm(self, agent_name: str, conversation_history: List[Dict[str, str]]) -> str:
@@ -710,63 +764,58 @@ class CompanyOrchestrator:
         if not config:
             return f"Error: Agent '{agent_name}' not found."
 
-        candidate_keys = self.get_candidate_keys(agent_name)
-        if not candidate_keys:
-            return f"Error: API Key for '{agent_name}' is not configured in .env."
-
         system_prompt = self.load_system_prompt(agent_name)
-        primary_model = config.model_name
+        candidates = self.get_client_candidates(agent_name)
 
-        # 폴백 모델 목록 (gemini-2.5-flash 및 gemini-2.5-flash-lite 최우선)
-        fallback_models = [primary_model, "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3.6-flash", "gemini-3.7-flash"]
-        models_to_try = []
-        for m in fallback_models:
-            if m and m not in models_to_try:
-                models_to_try.append(m)
+        if not candidates:
+            # API 키가 설정되지 않은 상태 안내
+            provider, model_id = config.get_provider_and_model()
+            logger.warning(f"No active API keys found for {agent_name} ({provider} / {model_id})")
+            return (
+                f"⚠️ *[{agent_name} 에이전트 대기 모드]*\n"
+                f"현재 `.env` 파일에 `{provider.upper()}_API_KEY`가 입력되지 않았습니다.\n"
+                f"`.env` 파일에 발급받으신 Groq 또는 Cerebras API 키를 입력해 주시면 즉시 가동됩니다."
+            )
 
         try:
             # 1. Headroom-AI 대화 기록 최적화
             optimized_history = self.headroom.optimize_messages(conversation_history)
-            formatted_history = "\n".join([f"[{t.get('role')}]: {t.get('content')}" for t in optimized_history])
 
-            def _call_llm_with_fallback(prompt_text: str) -> str:
+            def _call_llm_with_fallback(messages: List[Dict[str, str]]) -> str:
+                from openai import OpenAI
                 last_error = None
-                for model_candidate in models_to_try:
-                    for key_idx, key_candidate in enumerate(candidate_keys):
-                        try:
-                            try:
-                                from google import genai
-                                client = genai.Client(api_key=key_candidate)
-                                response = client.models.generate_content(
-                                    model=model_candidate,
-                                    contents=prompt_text
-                                )
-                                if response and response.text:
-                                    return response.text
-                            except ImportError:
-                                import google.generativeai as legacy_genai
-                                legacy_genai.configure(api_key=key_candidate)
-                                model = legacy_genai.GenerativeModel(model_name=model_candidate, system_instruction=system_prompt)
-                                response = model.generate_content(prompt_text)
-                                if response and response.text:
-                                    return response.text
-                        except Exception as err:
-                            err_msg = str(err)
-                            last_error = err
-                            is_quota_or_rate = "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg or "quota" in err_msg.lower() or "rate" in err_msg.lower()
-                            if is_quota_or_rate:
-                                logger.warning(f"[Quota Shield] 429 Rate/Quota on model '{model_candidate}' with key #{key_idx + 1}. Auto-switching fallback...")
-                                time.sleep(1.0)
-                                continue
-                            else:
-                                logger.error(f"LLM call exception ({model_candidate}): {err}")
-                                continue
+                
+                for cand in candidates:
+                    try:
+                        logger.info(f"Calling {cand['provider']} [{cand['model']}] for {agent_name}...")
+                        client = OpenAI(
+                            api_key=cand["api_key"],
+                            base_url=cand["base_url"],
+                            timeout=45.0
+                        )
+                        completion = client.chat.completions.create(
+                            model=cand["model"],
+                            messages=messages,
+                            temperature=0.7,
+                            max_tokens=4000,
+                        )
+                        if completion.choices and completion.choices[0].message.content:
+                            return completion.choices[0].message.content
+                    except Exception as err:
+                        err_msg = str(err)
+                        last_error = err
+                        logger.warning(f"[{cand['provider']}] call failed for {agent_name}: {err_msg[:80]}... Auto-switching next fallback.")
+                        time.sleep(1.0)
+                        continue
 
-                raise last_error or Exception("All LLM keys and fallback models exhausted.")
+                raise last_error or Exception("All Cerebras & Groq API candidates exhausted.")
 
-            # 초기 LLM 호출
-            prompt = f"{system_prompt}\n\n[대화 기록 및 업무 지시]\n{formatted_history}"
-            output_text = _call_llm_with_fallback(prompt)
+            # LLM 메시지 조립
+            full_messages = [
+                {"role": "system", "content": system_prompt},
+                *optimized_history
+            ]
+            output_text = _call_llm_with_fallback(full_messages)
 
             # 2. Tool 실행 루프: 도구 결과를 LLM에 재전달 (최대 3회)
             for _tool_iter in range(3):
@@ -774,8 +823,9 @@ class CompanyOrchestrator:
                 if not tool_output:
                     break
                 # 도구 결과를 포함하여 LLM 재호출
-                tool_prompt = f"{prompt}\n\n[이전 응답]\n{output_text}\n\n[도구 실행 결과]\n{tool_output}\n\n위 도구 실행 결과를 바탕으로 답변을 완성해 주세요."
-                output_text = _call_llm_with_fallback(tool_prompt)
+                full_messages.append({"role": "assistant", "content": output_text})
+                full_messages.append({"role": "user", "content": f"[도구 실행 결과]\n{tool_output}\n\n위 도구 실행 결과를 바탕으로 답변을 완성해 주세요."})
+                output_text = _call_llm_with_fallback(full_messages)
 
             # 3. Claude-Mem: 중요 결정사항 자동 기록
             if "결과 요약" in output_text or "완료" in output_text or "인수인계" in output_text:
@@ -937,10 +987,9 @@ class CompanyOrchestrator:
 
         results = []
         for tool_name, arg_str in tool_matches:
-            # key="value" or key=value 파싱
-            args = dict(re.findall(r'(\w+)=(?:"([^"]*)"|(\S+))', arg_str))
-            # 튜플 압축 해제
-            clean_args = {k: v[0] if v[0] else v[1] for k, v in args.items()}
+            # key="value" or key=value 파싱 (3개 그룹 정규식 매칭)
+            matches = re.findall(r'(\w+)=(?:"([^"]*)"|(\S+))', arg_str)
+            clean_args = {k: (v1 if v1 != '' else v2) for k, v1, v2 in matches}
             res = self.execute_tool(tool_name, **clean_args)
             results.append(f"• `{tool_name}`: ```{json.dumps(res, ensure_ascii=False, indent=2)}```")
 

@@ -1,5 +1,5 @@
 {
-  "current_project": "첫 프로젝트를 시작하자! <https://www.treeoflifemis...",
+  "current_project": "<https://www.treeoflifemissions.com|tree...",
   "active_agent": "None",
   "progress_percent": 100,
   "active_phase": "Phase 1: Core Automation Pipeline",
@@ -14,37 +14,37 @@
     "CEO": {
       "status": "완료",
       "last_task": "인수인계 완료",
-      "updated_at": "2026-08-21 11:38:15"
+      "updated_at": "2026-08-21 13:53:47"
     },
     "개발팀장": {
       "status": "완료",
       "last_task": "인수인계 완료",
-      "updated_at": "2026-08-21 11:38:50"
+      "updated_at": "2026-08-21 14:03:54"
     },
     "개발_사원A": {
-      "status": "대기",
-      "last_task": "-",
-      "updated_at": ""
+      "status": "완료",
+      "last_task": "인수인계 완료",
+      "updated_at": "2026-08-21 13:58:54"
     },
     "개발_사원B": {
-      "status": "대기",
-      "last_task": "-",
-      "updated_at": ""
+      "status": "완료",
+      "last_task": "인수인계 완료",
+      "updated_at": "2026-08-21 13:59:37"
     },
     "개발_사원C": {
-      "status": "대기",
-      "last_task": "-",
-      "updated_at": ""
+      "status": "완료",
+      "last_task": "인수인계 완료",
+      "updated_at": "2026-08-21 14:00:33"
     },
     "개발_사원D": {
-      "status": "대기",
-      "last_task": "-",
-      "updated_at": ""
+      "status": "완료",
+      "last_task": "인수인계 완료",
+      "updated_at": "2026-08-21 14:02:02"
     },
     "개발_사원E": {
-      "status": "대기",
-      "last_task": "-",
-      "updated_at": ""
+      "status": "완료",
+      "last_task": "인수인계 완료",
+      "updated_at": "2026-08-21 14:02:50"
     },
     "마케팅팀장": {
       "status": "대기",
@@ -97,5 +97,5 @@
       "updated_at": ""
     }
   },
-  "current_project_dir": "output/20260821_1137_첫_프로젝트를_시작하자_https_ww"
+  "current_project_dir": "output/20260821_1353_https_www_treeoflifemi"
 }

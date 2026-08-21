@@ -46,6 +46,22 @@
             </div>
         </div>
 
+        <div class="card" id="artifactCard" style="display: none; border-color: #0284c7; background: #0f2744;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <div>
+                    <h2 style="font-size: 16px; color: #38bdf8; font-weight: 700;">🌐 실시간 프로젝트 산출물 & 라이브 뷰어</h2>
+                    <p style="font-size: 13px; color: #94a3b8; margin-top: 2px;">개발 및 미디어 릴레이를 통해 생성된 산출물을 브라우저에서 바로 확인하세요.</p>
+                </div>
+                <a id="previewBtn" href="#" target="_blank" style="background: #0284c7; color: #fff; text-decoration: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; font-size: 13px; display: inline-flex; align-items: center; gap: 6px;">
+                    🚀 라이브 웹 미리보기 열기
+                </a>
+            </div>
+            <div style="background: #1e293b; padding: 12px; border-radius: 6px; font-size: 12px; color: #cbd5e1;">
+                <div><strong>• 라이브 링크:</strong> <span id="previewUrlText" style="color: #38bdf8; word-break: break-all;">-</span></div>
+                <div style="margin-top: 4px;"><strong>• 프로젝트 폴더:</strong> <span id="projectDirText" style="color: #a5b4fc;">-</span></div>
+            </div>
+        </div>
+
         <h2 style="font-size: 18px; margin-bottom: 12px; color: #e2e8f0;">에이전트별 실시간 상태</h2>
         <div class="grid" id="agentsGrid"></div>
     </div>
@@ -63,6 +79,28 @@
                 const percent = data.progress_percent || 0;
                 document.getElementById('progressFill').style.width = percent + '%';
                 document.getElementById('progressText').innerText = percent + '%';
+
+                // 산출물 미리보기 카드 업데이트
+                const artifactCard = document.getElementById('artifactCard');
+                const previewUrl = data.current_preview_url || '';
+                const projectDir = data.current_project_dir || '';
+                
+                if (previewUrl || projectDir) {
+                    artifactCard.style.display = 'block';
+                    document.getElementById('previewUrlText').innerText = previewUrl || '생성 대기 중';
+                    document.getElementById('projectDirText').innerText = projectDir || '-';
+                    const btn = document.getElementById('previewBtn');
+                    if (previewUrl) {
+                        btn.href = previewUrl;
+                        btn.style.opacity = '1';
+                        btn.style.pointerEvents = 'auto';
+                    } else {
+                        btn.style.opacity = '0.5';
+                        btn.style.pointerEvents = 'none';
+                    }
+                } else {
+                    artifactCard.style.display = 'none';
+                }
 
                 const grid = document.getElementById('agentsGrid');
                 grid.innerHTML = '';
