@@ -93,8 +93,37 @@ def post_as_agent(channel: str, agent_name: str, text: str, thread_ts: str = Non
                 logger.error(f"Auto-join failed for {channel}: {e2}")
         logger.error(f"Failed to post message as {agent_name}: {e}")
 
-# 에이전트 상세 활동 및 코드 전문 저장소 (메모리 캐시)
+# 에이전트 상세 활동 및 코드 전문 저장소 (메모리 + 디스크 영구 저장)
+LOGS_FILE = PROJECT_ROOT / "ai_company" / "memory" / "agent_full_logs.json"
 AGENT_FULL_LOGS: dict = {}
+
+def _load_agent_logs() -> dict:
+    global AGENT_FULL_LOGS
+    try:
+        if LOGS_FILE.exists():
+            with open(LOGS_FILE, "r", encoding="utf-8") as f:
+                AGENT_FULL_LOGS = json.load(f)
+    except Exception:
+        AGENT_FULL_LOGS = {}
+    return AGENT_FULL_LOGS
+
+def _save_agent_log(log_id: str, data: dict):
+    global AGENT_FULL_LOGS
+    _load_agent_logs()
+    AGENT_FULL_LOGS[log_id] = data
+    try:
+        LOGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        # 최대 100개 로그만 유지
+        if len(AGENT_FULL_LOGS) > 100:
+            keys_to_del = list(AGENT_FULL_LOGS.keys())[:-100]
+            for k in keys_to_del:
+                del AGENT_FULL_LOGS[k]
+        with open(LOGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(AGENT_FULL_LOGS, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.warning(f"Failed to persist agent log to disk: {e}")
+
+_load_agent_logs()
 
 def extract_compact_summary(agent_name: str, full_text: str) -> str:
     """
@@ -105,20 +134,18 @@ def extract_compact_summary(agent_name: str, full_text: str) -> str:
     if not lines:
         return "작업 완료"
     
-    # 툴 실행 태그 정리 ([TOOL:write_file path="..."] -> 📁 파일 생성: ...)
     clean_lines = []
     for line in lines:
-        line_clean = re.sub(r'\[TOOL:write_file\s+path="([^"]+)"[^\]]*\]', r'📁 [생성] `\1`', line)
-        line_clean = re.sub(r'\[TOOL:read_file\s+path="([^"]+)"[^\]]*\]', r'📄 [참조] `\1`', line_clean)
-        line_clean = re.sub(r'\[TOOL:run_command\s+command="([^"]+)"[^\]]*\]', r'⚙️ [명령] `\1`', line_clean)
-        line_clean = re.sub(r'\[TOOL:playwright_browse\s+url="([^"]+)"[^\]]*\]', r'🌐 [분석] `\1`', line_clean)
+        line_clean = re.sub(r'\[TOOL:write_file\s+path="([^"]+)"[^\]]*\]', r'📁 *[파일생성]* `\1`', line)
+        line_clean = re.sub(r'\[TOOL:read_file\s+path="([^"]+)"[^\]]*\]', r'📄 *[파일참조]* `\1`', line_clean)
+        line_clean = re.sub(r'\[TOOL:run_command\s+command="([^"]+)"[^\]]*\]', r'⚙️ *[명령실행]* `\1`', line_clean)
+        line_clean = re.sub(r'\[TOOL:playwright_browse\s+url="([^"]+)"[^\]]*\]', r'🌐 *[웹분석]* `\1`', line_clean)
         
         # 긴 코드 블록 마커는 생략
-        if line_clean.startswith("```") and len(line_clean) > 3:
+        if line_clean.startswith("```") or line_clean.startswith("<div") or line_clean.startswith("import ") or line_clean.startswith("from "):
             continue
         clean_lines.append(line_clean)
         
-    # 핵심 라인 추출 (앞 3줄 + 태그 있는 라인)
     summary_parts = []
     tag_line = ""
     for l in clean_lines:
@@ -135,7 +162,7 @@ def extract_compact_summary(agent_name: str, full_text: str) -> str:
         summary_parts.append(f"\n👉 *인수인계*: {tag_line}")
         
     res = "\n".join(summary_parts[:5])
-    return res if len(res) <= 600 else (res[:590] + "...")
+    return res if len(res) <= 800 else (res[:790] + "...")
 
 def post_as_agent_with_summary(channel: str, agent_name: str, full_text: str, thread_ts: str = None):
     """
@@ -146,22 +173,25 @@ def post_as_agent_with_summary(channel: str, agent_name: str, full_text: str, th
             logger.debug(f"Slack not configured, logging output for {agent_name}: {full_text[:60]}...")
         return
 
-    # 300자 이하의 짧은 텍스트는 그대로 전송
-    if len(full_text.strip()) <= 300 and "[TOOL:" not in full_text:
-        post_as_agent(channel, agent_name, full_text, thread_ts=thread_ts)
-        return
-
-    # 고유 로그 ID 생성 및 저장
+    # 고유 로그 ID 생성 및 영구 저장
     log_id = f"log_{agent_name}_{int(time.time() * 1000)}"
     config = AGENTS.get(agent_name)
     role = config.role if config else "전문가"
     
-    AGENT_FULL_LOGS[log_id] = {
+    log_entry = {
         "agent": agent_name,
         "role": role,
         "time": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "full_text": full_text
+        "full_text": full_text,
+        "channel": channel,
+        "thread_ts": thread_ts
     }
+    _save_agent_log(log_id, log_entry)
+    
+    # 200자 이하의 매우 짧은 텍스트는 그대로 전송
+    if len(full_text.strip()) <= 200 and "[TOOL:" not in full_text:
+        post_as_agent(channel, agent_name, full_text, thread_ts=thread_ts)
+        return
     
     # 요약문 생성
     summary = extract_compact_summary(agent_name, full_text)
@@ -187,7 +217,7 @@ def post_as_agent_with_summary(channel: str, agent_name: str, full_text: str, th
         }
     ]
     
-    post_as_agent(channel, agent_name, f"📋 *[{agent_name} 요약]* {summary[:100]}...", thread_ts=thread_ts, blocks=blocks)
+    post_as_agent(channel, agent_name, f"📋 *[{agent_name} 요약]* {summary[:120]}...", thread_ts=thread_ts, blocks=blocks)
 
 def get_server_host() -> str:
     """GCP 메타데이터 서버 / 공인 IP / 환경변수 SERVER_HOST 자동 감지"""
@@ -949,38 +979,44 @@ def handle_reject_dev(ack, body, respond):
 @app.action("view_agent_full_log")
 def handle_view_agent_full_log(ack, body, client):
     """
-    사원의 긴 활동 및 코드 전문을 슬랙 모달(Modal) 팝업으로 깔끔하게 표시
+    사원의 긴 활동 및 코드 전문을 슬랙 모달(Modal) 팝업으로 표시하고,
+    모달 실패 시 스레드 댓글로 즉시 열람 지원
     """
     ack()
     trigger_id = body.get("trigger_id")
     action_val = body.get("actions", [{}])[0].get("value", "")
+    channel = body.get("channel", {}).get("id", "")
+    message_ts = body.get("message", {}).get("ts", "")
     
-    log_data = AGENT_FULL_LOGS.get(action_val)
+    logs = _load_agent_logs()
+    log_data = logs.get(action_val) or AGENT_FULL_LOGS.get(action_val)
+    
     if not log_data:
-        try:
-            client.views_open(
-                trigger_id=trigger_id,
-                view={
-                    "type": "modal",
-                    "title": {"type": "plain_text", "text": "활동 전문 조회", "emoji": True},
-                    "close": {"type": "plain_text", "text": "닫기", "emoji": True},
-                    "blocks": [
-                        {
-                            "type": "section",
-                            "text": {"type": "mrkdwn", "text": "⚠️ 세션이 갱신되었거나 상세 전문 로그를 찾을 수 없습니다."}
-                        }
-                    ]
-                }
-            )
-        except Exception as e:
-            logger.error(f"Failed to open modal: {e}")
+        if trigger_id:
+            try:
+                client.views_open(
+                    trigger_id=trigger_id,
+                    view={
+                        "type": "modal",
+                        "title": {"type": "plain_text", "text": "활동 전문 조회", "emoji": True},
+                        "close": {"type": "plain_text", "text": "닫기", "emoji": True},
+                        "blocks": [
+                            {
+                                "type": "section",
+                                "text": {"type": "mrkdwn", "text": "⚠️ 상세 전문 로그를 불러오는 중입니다. 잠시 후 다시 클릭해 주세요."}
+                            }
+                        ]
+                    }
+                )
+            except Exception:
+                pass
         return
 
     agent_name = log_data.get("agent", "에이전트")
     role = log_data.get("role", "전문가")
     full_text = log_data.get("full_text", "")
     
-    # 텍스트를 슬랙 블록 제한(2800자) 이하 청크로 안전하게 분할
+    # 텍스트를 슬랙 블록 제한(2800자) 이하 청크로 분할
     chunks = [full_text[i:i+2800] for i in range(0, len(full_text), 2800)] or ["(내용 없음)"]
     modal_blocks = [
         {
@@ -997,18 +1033,32 @@ def handle_view_agent_full_log(ack, body, client):
             "text": {"type": "mrkdwn", "text": f"```{c}```"}
         })
 
-    try:
-        client.views_open(
-            trigger_id=trigger_id,
-            view={
-                "type": "modal",
-                "title": {"type": "plain_text", "text": f"{agent_name[:18]} 상세 활동", "emoji": True},
-                "close": {"type": "plain_text", "text": "닫기", "emoji": True},
-                "blocks": modal_blocks
-            }
-        )
-    except Exception as e:
-        logger.error(f"Failed to open full log modal: {e}")
+    modal_opened = False
+    if trigger_id:
+        try:
+            client.views_open(
+                trigger_id=trigger_id,
+                view={
+                    "type": "modal",
+                    "title": {"type": "plain_text", "text": f"{agent_name[:18]} 상세 활동", "emoji": True},
+                    "close": {"type": "plain_text", "text": "닫기", "emoji": True},
+                    "blocks": modal_blocks
+                }
+            )
+            modal_opened = True
+        except Exception as e:
+            logger.warning(f"Modal open failed ({e}), falling back to thread post...")
+
+    # 모달 실패 시 해당 메시지의 스레드 댓글로 전문 바로 게시 (안전망)
+    if not modal_opened and channel and message_ts:
+        try:
+            client.chat_postMessage(
+                channel=channel,
+                thread_ts=message_ts,
+                text=f"📜 *[{agent_name} 활동 및 코드 전문]*\n```{full_text[:3500]}```"
+            )
+        except Exception as e2:
+            logger.error(f"Thread fallback post failed: {e2}")
 
 
 def start_local_dashboard_server(port: int = 8080):

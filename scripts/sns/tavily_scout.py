@@ -1,70 +1,72 @@
+import os
 import json
 import logging
 import requests
 from typing import List, Dict, Any, Optional
-from google import genai
-from google.genai import types
+from openai import OpenAI
 
-from scripts.sns.config import TAVILY_API_KEY, key_pool, get_gemini_key, get_gemini_model
+from scripts.sns.config import TAVILY_API_KEY
 from scripts.sns.queue_db import QueueDB
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("TavilyScout")
 
 class TavilyScout:
-    def __init__(self, tavily_api_key: Optional[str] = None, gemini_api_key: Optional[str] = None):
+    def __init__(self, tavily_api_key: Optional[str] = None):
         self.tavily_api_key = tavily_api_key or TAVILY_API_KEY
-        self.gemini_api_key = gemini_api_key or get_gemini_key("worker")
-        self.model_name = get_gemini_model("worker")
-        self._init_gemini()
+        self._init_llm_candidates()
 
-    def _init_gemini(self):
-        if self.gemini_api_key:
-            self.client = genai.Client(api_key=self.gemini_api_key)
-        else:
-            self.client = None
-            logger.warning("GEMINI_API_KEY is not set. LLM generation will be unavailable.")
+    def _init_llm_candidates(self):
+        cerebras_key = (os.getenv("CEREBRAS_API_KEY_3") or os.getenv("CEREBRAS_API_KEY", "")).strip()
+        groq_key = (os.getenv("GROQ_API_KEY_3") or os.getenv("GROQ_API_KEY", "")).strip()
+        self.candidates = []
+        
+        if cerebras_key:
+            self.candidates.append({
+                "provider": "Cerebras",
+                "base_url": "https://api.cerebras.ai/v1",
+                "api_key": cerebras_key,
+                "model": "gemma-4-31b"
+            })
+        if groq_key:
+            self.candidates.append({
+                "provider": "Groq",
+                "base_url": "https://api.groq.com/openai/v1",
+                "api_key": groq_key,
+                "model": "openai/gpt-oss-20b"
+            })
 
     def _generate_with_fallback(self, prompt: str, temperature: float = 0.5) -> str:
         """
-        API 한도(429/ResourceExhausted) 발생 시,
-        CEO Key 1을 80%까지만 스마트 차용(20% 안전 보존)하여 자동 재시도하는 래퍼 함수
+        Cerebras & Groq OpenAI 호환 LLM 호출 래퍼
         """
-        if not self.client:
-            raise ValueError("Gemini Client가 초기화되지 않았습니다.")
+        if not self.candidates:
+            self._init_llm_candidates()
+        if not self.candidates:
+            raise ValueError("CEREBRAS_API_KEY 또는 GROQ_API_KEY가 설정되지 않았습니다.")
 
-        try:
-            res = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
+        last_err = None
+        for cand in self.candidates:
+            try:
+                client = OpenAI(
+                    api_key=cand["api_key"],
+                    base_url=cand["base_url"],
+                    timeout=30.0
+                )
+                completion = client.chat.completions.create(
+                    model=cand["model"],
+                    messages=[{"role": "user", "content": prompt}],
                     temperature=temperature,
-                ),
-            )
-            return res.text
-        except Exception as e:
-            err_msg = str(e).lower()
-            if "429" in err_msg or "resource_exhausted" in err_msg or "quota" in err_msg:
-                logger.warning(f"[Quota Shield] Key 3 실무사원 한도 초과 감지 ({e}) -> 폴백 키 요청 중...")
-                fallback_key, label = key_pool.get_fallback_key("worker")
-                if fallback_key:
-                    logger.info(f"[Quota Shield] {label}로 클라이언트 재초기화 후 재시도합니다.")
-                    self.gemini_api_key = fallback_key
-                    self._init_gemini()
-                    res = self.client.models.generate_content(
-                        model=self.model_name,
-                        contents=prompt,
-                        config=types.GenerateContentConfig(
-                            response_mime_type="application/json",
-                            temperature=temperature,
-                        ),
-                    )
-                    return res.text
-                else:
-                    raise RuntimeError(f"API 한도 초과 및 폴백 차단: {label}") from e
-            else:
-                raise
+                    response_format={"type": "json_object"}
+                )
+                if completion.choices and completion.choices[0].message.content:
+                    return completion.choices[0].message.content
+            except Exception as e:
+                last_err = e
+                logger.warning(f"[{cand['provider']}] TavilyScout LLM 호출 실패: {e}. 다음 후보로 전환...")
+                continue
+                
+        raise last_err or RuntimeError("모든 LLM 클라우드 후보 호출 실패")
 
     def search_tavily(self, query: str, max_results: int = 5) -> Dict[str, Any]:
         """Tavily Search API 호출 (월 1,000회 무료 티어 활용)"""

@@ -19,44 +19,17 @@ for env_path in env_candidates:
         load_dotenv(dotenv_path=env_path, override=False)
 
 # ==============================================================================
-# 1. API Keys (1, 2, 3 분할 및 역할별 할당)
+# 1. API Keys (Cerebras & Groq 듀얼 클라우드)
 # ==============================================================================
-GEMINI_API_KEY_1 = os.getenv("GEMINI_API_KEY_1", "").strip()  # 기본: CEO 전용
-GEMINI_API_KEY_2 = os.getenv("GEMINI_API_KEY_2", "").strip()  # 기본: 팀장 & 개발직원 전용
-GEMINI_API_KEY_3 = os.getenv("GEMINI_API_KEY_3", "").strip()  # 기본: 마케팅 & SNS 실무사원 전용
-
-# 폴백 공통 키
-DEFAULT_GEMINI_KEY = (
-    os.getenv("GEMINI_API_KEY")
-    or os.getenv("GOOGLE_API_KEY", "")
-).strip()
+CEREBRAS_API_KEY = (os.getenv("CEREBRAS_API_KEY_1") or os.getenv("CEREBRAS_API_KEY", "")).strip()
+GROQ_API_KEY = (os.getenv("GROQ_API_KEY_1") or os.getenv("GROQ_API_KEY", "")).strip()
 
 # ==============================================================================
-# 2. 직급별 Gemini 모델 버전 설정 (3.6 / 3.5-lite 지원 및 공식 API 명칭 자동 매핑)
+# 2. 직급별 모델 설정 (120B / Gemma / Qwen)
 # ==============================================================================
-MODEL_CEO = os.getenv("MODEL_CEO", "3.6").strip()
-MODEL_MANAGER = os.getenv("MODEL_MANAGER", "3.6").strip()
-MODEL_WORKER = os.getenv("MODEL_WORKER", "3.6").strip()
-
-def normalize_model_name(raw_name: str, fallback: str = "gemini-3.6-flash") -> str:
-    """
-    사용자 친화적 버전 표기(3.6, 3.5 등)를 Google Gemini 공식 API 엔드포인트명으로 자동 변환
-    - '3.6' / '3.6 flash' / '3.7' -> 'gemini-3.6-flash'
-    - '3.5-lite' / '3.5 lite'     -> 'gemini-3.6-flash'
-    - '3.5' / '3.5 flash'          -> 'gemini-3.6-flash'
-    """
-    raw = (raw_name or "").strip().lower()
-    if not raw:
-        return fallback
-    if raw in ("3.5-lite", "3.5 lite", "3.5_lite", "lite", "gemini-3.5-lite", "gemini-2.0-flash-lite", "flash-lite", "2.0-flash-lite"):
-        return "gemini-3.6-flash"
-    elif raw in ("3.6", "3.6 flash", "3.6-flash", "3.7", "3.7 flash", "gemini-3.6", "gemini-3.6-flash", "gemini-2.5-flash", "2.5-flash", "flash", "gemini-2.0-flash", "2.0-flash"):
-        return "gemini-3.6-flash"
-    elif raw in ("3.5", "3.5 flash", "3.5-flash", "gemini-3.5", "gemini-3.5-flash"):
-        return "gemini-3.6-flash"
-    elif not raw.startswith("gemini-"):
-        return f"gemini-{raw}"
-    return raw
+MODEL_CEO = os.getenv("MODEL_CEO", "cerebras/gpt-oss-120b").strip()
+MODEL_MANAGER = os.getenv("MODEL_MANAGER", "cerebras/gpt-oss-120b").strip()
+MODEL_WORKER = os.getenv("MODEL_WORKER", "cerebras/gemma-4-31b").strip()
 
 def get_gemini_model(role: str = "worker") -> str:
     """역할에 맞는 공식 Gemini 모델 버전 반환"""

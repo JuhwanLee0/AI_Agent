@@ -925,26 +925,88 @@ class CompanyOrchestrator:
         elif tool_name == "status_summary":
             return {"summary": self.tracker.get_summary()}
 
-        # --- 개발용 도구 4종 (Ponytail: stdlib only) ---
+        # --- 개발용 도구 4종 (Smart Fallback & Ponytail) ---
         elif tool_name == "write_file":
             path, content = kwargs.get("path", ""), kwargs.get("content", "")
-            project_root = os.path.dirname(BASE_DIR)  # ai_company의 부모
+            project_root = os.path.dirname(BASE_DIR)
+            
+            # 경로가 단순 파일명인 경우 현재 활성 프로젝트 디렉토리에 배치
+            base_dir_state = self.tracker.state.get("current_project_dir", "")
+            if "/" not in path and "\\" not in path and base_dir_state:
+                path = os.path.join(base_dir_state, path)
+            elif not path.startswith("projects/") and not path.startswith("output/") and base_dir_state:
+                path = os.path.join(base_dir_state, path)
+                
             abs_path = os.path.normpath(os.path.join(project_root, path))
             if not abs_path.startswith(project_root):
                 return {"success": False, "error": "경로 탈출 금지"}
             os.makedirs(os.path.dirname(abs_path), exist_ok=True)
             with open(abs_path, "w", encoding="utf-8") as f:
                 f.write(content)
-            return {"success": True, "path": path}
+            logger.info(f"[Tool:write_file] Successfully wrote {len(content)} chars to {path}")
+            return {"success": True, "path": path, "size": len(content)}
 
         elif tool_name == "read_file":
-            path = kwargs.get("path", "")
+            path = kwargs.get("path", "").strip()
             project_root = os.path.dirname(BASE_DIR)
-            abs_path = os.path.normpath(os.path.join(project_root, path))
-            if not os.path.exists(abs_path):
-                return {"success": False, "error": f"파일 없음: {path}"}
-            with open(abs_path, "r", encoding="utf-8") as f:
-                return {"success": True, "content": f.read()[:5000]}
+            
+            # 1. 직접 지정된 절대/상대 경로 검사
+            target_file = None
+            candidate_paths = [
+                os.path.normpath(os.path.join(project_root, path)),
+                os.path.normpath(os.path.join(BASE_DIR, path)),
+            ]
+            
+            base_dir_state = self.tracker.state.get("current_project_dir", "")
+            if base_dir_state:
+                candidate_paths.append(os.path.normpath(os.path.join(project_root, base_dir_state, path)))
+                candidate_paths.append(os.path.normpath(os.path.join(project_root, "projects", base_dir_state.replace("output/", ""), path)))
+            
+            for cp in candidate_paths:
+                if os.path.exists(cp) and os.path.isfile(cp):
+                    target_file = cp
+                    break
+                    
+            # 2. 스마트 퍼지 탐색: 파일명만으로 projects/ 및 output/ 하위 재귀 검색
+            if not target_file:
+                target_filename = os.path.basename(path)
+                search_roots = [os.path.join(project_root, "projects"), os.path.join(project_root, "output"), BASE_DIR]
+                matched_files = []
+                for sroot in search_roots:
+                    if os.path.exists(sroot):
+                        for root, _, fnames in os.walk(sroot):
+                            if target_filename in fnames:
+                                matched_files.append(os.path.join(root, target_filename))
+                if matched_files:
+                    # 가장 최근 수정된 파일 선택
+                    matched_files.sort(key=lambda f: os.path.getmtime(f), reverse=True)
+                    target_file = matched_files[0]
+                    logger.info(f"[Tool:read_file] Smart resolved '{path}' -> '{target_file}'")
+
+            if not target_file or not os.path.exists(target_file):
+                # 주변 파일 목록 힌트 제공
+                available = []
+                for sdir in ["projects", "output"]:
+                    sp = os.path.join(project_root, sdir)
+                    if os.path.exists(sp):
+                        for r, _, fns in os.walk(sp):
+                            for fn in fns:
+                                if fn.endswith((".md", ".html", ".js", ".css", ".py", ".json")):
+                                    available.append(os.path.relpath(os.path.join(r, fn), project_root))
+                return {
+                    "success": False,
+                    "error": f"파일을 찾을 수 없습니다: {path}",
+                    "hint_available_files": available[:10]
+                }
+
+            with open(target_file, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read()
+                rel = os.path.relpath(target_file, project_root)
+                return {
+                    "success": True,
+                    "resolved_path": rel,
+                    "content": content[:8000]
+                }
 
         elif tool_name == "list_files":
             path = kwargs.get("path", ".")
@@ -955,7 +1017,7 @@ class CompanyOrchestrator:
             for root, dirs, fnames in os.walk(abs_path):
                 dirs[:] = [d for d in dirs if d not in skip]
                 for fn in fnames:
-                    files.append(os.path.relpath(os.path.join(root, fn), abs_path))
+                    files.append(os.path.relpath(os.path.join(root, fn), project_root))
                 if len(files) > 100:
                     break
             return {"success": True, "files": files[:100]}
