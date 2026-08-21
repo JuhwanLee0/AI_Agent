@@ -220,9 +220,10 @@ def handle_direct_messages(body, say):
 
 
 # ----------------------------------------------------
-# 슬래시 커맨드 (Slash Commands)
+# 슬래시 커맨드 (Slash Commands - /status & /ai-status 모두 지원)
 # ----------------------------------------------------
 @app.command("/status")
+@app.command("/ai-status")
 def handle_status_command(ack, respond, command):
     ack()
     summary = orchestrator.tracker.get_summary()
@@ -238,13 +239,8 @@ def handle_status_command(ack, respond, command):
 
 
 @app.command("/schedule")
+@app.command("/ai-schedule")
 def handle_schedule_command(ack, respond, command):
-    """
-    /schedule : 현재 스케줄 확인
-    /schedule set threads 09:00,18:30
-    /schedule set youtube 20:00
-    /schedule set buffer 3
-    """
     ack()
     text = command.get("text", "").strip()
     cfg = schedule_mgr.load_config()
@@ -291,6 +287,7 @@ def handle_schedule_command(ack, respond, command):
 
 
 @app.command("/instant")
+@app.command("/ai-instant")
 def handle_instant_command(ack, respond, command):
     """예비 풀에서 팩트 2차 재검증된 스레드를 1초 만에 인출"""
     ack()
@@ -340,6 +337,7 @@ def handle_instant_command(ack, respond, command):
 
 
 @app.command("/browse")
+@app.command("/ai-browse")
 def handle_browse_command(ack, respond, command):
     ack()
     text = command.get("text", "").strip()
@@ -362,6 +360,7 @@ def handle_browse_command(ack, respond, command):
 
 
 @app.command("/threads")
+@app.command("/ai-threads")
 def handle_threads_command(ack, respond, command):
     ack()
     text = command.get("text", "").strip()
@@ -379,18 +378,21 @@ def handle_threads_command(ack, respond, command):
 
 
 @app.command("/help")
+@app.command("/agent-help")
+@app.command("/ai-help")
 def handle_help_command(ack, respond, command):
     ack()
     msg = """
 🤖 *1인 AI 비즈니스 OS 슬랙 명령어 안내*
-• `/status` : 전체 에이전트 상태, GSD 마일스톤, 콘텐츠 버퍼 현황 확인
-• `/schedule` : 동적 발행 시간대 및 버퍼 수량 조회 및 실시간 변경
-• `/instant` : 팩트 2차 재검증된 예비 스레드 1초 즉시 인출 및 승인 요청
-• `/browse <URL>` : Playwright 브라우저로 웹페이지 내용 실시간 스크래핑
-• `/threads <내용>` : Threads에 글 즉시 발행 또는 스테이징
-• `@CEO` / `@개발팀장` / `@마케팅팀장` : 채널에서 에이전트 멘션 시 `instruction.md` 태그 협업 파이프라인 가동
+• `/status` 또는 `/ai-status` : 전체 에이전트 상태, GSD 마일스톤, 콘텐츠 버퍼 현황 확인
+• `/schedule` 또는 `/ai-schedule` : 동적 발행 시간대 및 버퍼 수량 조회 및 실시간 변경
+• `/instant` 또는 `/ai-instant` : 팩트 2차 재검증된 예비 스레드 1초 즉시 인출 및 승인 요청
+• `/browse <URL>` 또는 `/ai-browse <URL>` : Playwright 브라우저로 웹페이지 내용 실시간 스크래핑
+• `/threads <내용>` 또는 `/ai-threads <내용>` : Threads에 글 즉시 발행 또는 스테이징
+• `@CEO` / `@개발팀장` / `@마케팅팀장` : 채널에서 에이전트 멘션 시 instruction.md 태그 협업 파이프라인 가동
 """
     respond(msg)
+
 
 
 # ----------------------------------------------------
