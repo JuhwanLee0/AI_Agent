@@ -419,8 +419,8 @@ class AgentConfig:
 
 
 AGENTS: Dict[str, AgentConfig] = {
-    # 경영진
-    "CEO": AgentConfig("CEO", "최고경영자", "executive", "ceo_instruction.md", "GEMINI_API_KEY_CEO", "MODEL_CEO", "gemini-2.5-pro", "briefcase"),
+    # 경영진 (CEO: 3.6 flash 통일)
+    "CEO": AgentConfig("CEO", "최고경영자", "executive", "ceo_instruction.md", "GEMINI_API_KEY_CEO", "MODEL_CEO", "gemini-2.5-flash", "briefcase"),
     
     # 개발본부 (개발사원은 팀장과 동일한 Key 2 및 MODEL_MANAGER 적용)
     "개발팀장": AgentConfig("개발팀장", "Technical Lead & Scrum Master", "dev", "dev_instruction.md", "GEMINI_API_KEY_DEV", "MODEL_MANAGER", "gemini-2.5-flash", "hammer_and_wrench"),

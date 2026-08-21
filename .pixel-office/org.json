@@ -12,7 +12,7 @@
       "sprite": "cat_orange",
       "tunic": "#1d2d44",
       "seat": 0,
-      "model": "gemini-2.5-pro",
+      "model": "gemini-2.5-flash",
       "avatar": "briefcase",
       "zone_manual": true
     },
