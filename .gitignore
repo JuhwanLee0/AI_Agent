@@ -22,7 +22,14 @@ data/*.sqlite
 
 # Output & Logs
 output/
+projects/
 *.log
+
+# AI Company runtime state & memory
+ai_company/status.json
+ai_company/memory/
+ai_company/scratch/
+ai_company/.planning/
 
 # macOS
 .DS_Store
