@@ -216,64 +216,26 @@ def extract_compact_summary(agent_name: str, full_text: str) -> str:
 
 def post_as_agent_with_summary(channel: str, agent_name: str, full_text: str, thread_ts: str = None):
     """
-    에이전트 메시지를 '요약본 카드'로 출력하고, '전체본 보기(모달)' 및 '스레드 펼치기' 버튼을 제공
+    [Ponytail Minimal] 에이전트 메시지를 군더더기 없는 2~3줄 심플 텍스트로 스레드에 깔끔하게 전송
     """
     if not channel or not is_slack_configured:
         if not is_slack_configured:
             logger.debug(f"Slack not configured, logging output for {agent_name}: {full_text[:60]}...")
         return
 
-    # 고유 로그 ID 생성 및 영구 저장
-    log_id = f"log_{agent_name}_{int(time.time() * 1000)}"
     config = AGENTS.get(agent_name)
     role = config.role if config else "전문가"
     
-    log_entry = {
-        "agent": agent_name,
-        "role": role,
-        "time": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "full_text": full_text,
-        "channel": channel,
-        "thread_ts": thread_ts
-    }
-    _save_agent_log(log_id, log_entry)
-    
-    # 150자 이하의 매우 짧은 텍스트는 그대로 전송
+    # 150자 이하의 짧은 텍스트는 그대로 전송
     if len(full_text.strip()) <= 150 and "[TOOL:" not in full_text:
-        post_as_agent(channel, agent_name, full_text, thread_ts=thread_ts)
+        post_as_agent(channel, agent_name, full_text.strip(), thread_ts=thread_ts)
         return
     
-    # 요약문 생성
+    # 2~3줄 가독성 높은 콤팩트 요약문 추출
     summary = extract_compact_summary(agent_name, full_text)
+    msg_text = f"👤 *[{agent_name}]* ({role})\n{summary}"
     
-    blocks = [
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"📋 *[{agent_name} 실무 요약]* ({role})\n{summary}"
-            }
-        },
-        {
-            "type": "actions",
-            "elements": [
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "📜 전체 활동 & 코드 보기", "emoji": True},
-                    "value": log_id,
-                    "action_id": "view_agent_full_log"
-                },
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "💬 스레드에 전문 펼치기", "emoji": True},
-                    "value": log_id,
-                    "action_id": "expand_agent_log_to_thread"
-                }
-            ]
-        }
-    ]
-    
-    post_as_agent(channel, agent_name, f"📋 *[{agent_name} 요약]* {summary[:120]}...", thread_ts=thread_ts, blocks=blocks)
+    post_as_agent(channel, agent_name, msg_text, thread_ts=thread_ts)
 
 def get_server_host() -> str:
     """
@@ -556,6 +518,9 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
         # 해당 부서 전용 채널(또는 요청 채널)에 '요약본 카드 + 전체본 보기 버튼'으로 회신
         post_as_agent_with_summary(target_channel, current_agent, response, thread_ts if target_channel == channel else None)
 
+        # 메인 채널을 어지럽히지 않고, 오직 요청이 들어온 원본 스레드(thread_ts) 안에만 2~3줄 심플 텍스트로 인수인계 보고
+        post_as_agent_with_summary(channel, current_agent, response, thread_ts=thread_ts)
+
         # 상태 업데이트 (완료)
         orchestrator.tracker.update_agent(
             agent_name=current_agent,
@@ -587,7 +552,7 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
             logger.info("Pipeline completed or no further agent tagged.")
             break
 
-    # 최종 완료 보고 — 5대 채널 크로스 알림
+    # 최종 완료 보고 — 미니멀 텍스트 구조
     orchestrator.tracker.state["progress_percent"] = 100
     orchestrator.tracker.state["active_agent"] = "None"
     
@@ -608,179 +573,70 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
     
     file_list_str = "\n".join([f"• `{f}`" for f in info["files"][:6]]) if info["files"] else f"• `{target_project_dir_rel}/index.html` 생성 완료"
 
-    # 슬랙 직접 파일 첨부 (GCP 방화벽 상관없이 슬랙에서 HTML/DESIGN.md 바로 열람/다운로드)
+    # 슬랙 직접 파일 첨부 (HTML/DESIGN.md 즉시 열람)
     if target_project_dir_rel and has_web:
         upload_project_files_to_slack(channel, thread_ts, target_project_dir_rel)
-        rev_chan = CHANNEL_MAP.get("output_review")
-        if rev_chan and rev_chan != channel:
-            upload_project_files_to_slack(rev_chan, None, target_project_dir_rel)
 
-    # 1. #hq-board: CEO 최종 완료 보고 (원본 스레드에)
+    # 1. 원본 요청 스레드: CEO 최종 완료 보고 (미니멀 텍스트)
     if len(visited_agents) > 2:
         if has_web:
-            post_as_agent(
-                channel, "CEO",
+            ceo_thread_msg = (
                 f"✅ *[프로젝트 완료 보고]* {summary_text}\n"
                 f"• 👥 릴레이: `{relay_path}`\n"
                 f"• {preview_label}: <{preview_url}|{preview_url}>\n"
                 f"• 📁 산출물 디렉토리: `{target_project_dir_rel}`\n"
-                f"• 📋 생성 파일 ({info['total_files']}개):\n{file_list_str}",
-                thread_ts
+                f"• 📋 주요 생성 파일:\n{file_list_str}"
             )
         else:
-            post_as_agent(
-                channel, "CEO",
+            ceo_thread_msg = (
                 f"✅ *[업무 완료 보고]* {summary_text}\n"
                 f"• 👥 릴레이: `{relay_path}`\n"
                 f"• 📁 산출물 디렉토리: `{target_project_dir_rel}`\n"
-                f"• 📋 산출물 목록 ({info['total_files']}개):\n{file_list_str if info['files'] else '• 담당 에이전트 실무 처리 완료'}",
-                thread_ts
+                f"• 📋 산출물 목록:\n{file_list_str if info['files'] else '• 담당 에이전트 실무 처리 완료'}"
             )
+        post_as_agent(channel, "CEO", ceo_thread_msg, thread_ts=thread_ts)
 
-    # 2. #ceo-briefing: CEO 일일 다이렉트 상세 보고 카드 (Block Kit)
+    # 2. #ceo-briefing: CEO 일일 다이렉트 브리핑 (미니멀 텍스트)
     ceo_chan = CHANNEL_MAP.get("ceo_report")
-    if ceo_chan and len(visited_agents) > 2:
-        permalink = get_message_permalink(channel, thread_ts)
-        
+    if ceo_chan and ceo_chan != channel and len(visited_agents) > 2:
         if has_web:
-            ceo_fields = [
-                {"type": "mrkdwn", "text": f"*프로젝트:*\n{summary_text}"},
-                {"type": "mrkdwn", "text": f"*투입 에이전트 ({len(visited_agents)}명):*\n`{relay_path}`"},
-                {"type": "mrkdwn", "text": f"*{preview_label}:*\n<{preview_url}|{preview_url}>"},
-                {"type": "mrkdwn", "text": f"*산출물 경로:*\n`{target_project_dir_rel}`"}
-            ]
-            ceo_action_elements = [
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "🌐 로컬 라이브 웹 열기" if is_local else "🌐 라이브 웹 열기", "emoji": True},
-                    "url": preview_url,
-                    "style": "primary"
-                },
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "💬 원본 토론 스레드 바로가기", "emoji": True},
-                    "url": permalink or "https://slack.com"
-                }
-            ]
+            ceo_brief_msg = (
+                f"📋 *[CEO 프로젝트 브리핑]* {summary_text}\n"
+                f"• 👥 투입 에이전트: `{relay_path}`\n"
+                f"• {preview_label}: <{preview_url}|{preview_url}>\n"
+                f"• 📁 산출물 경로: `{target_project_dir_rel}`\n"
+                f"• 📋 주요 파일:\n{file_list_str}"
+            )
         else:
-            ceo_fields = [
-                {"type": "mrkdwn", "text": f"*업무 목표:*\n{summary_text}"},
-                {"type": "mrkdwn", "text": f"*투입 에이전트 ({len(visited_agents)}명):*\n`{relay_path}`"},
-                {"type": "mrkdwn", "text": f"*진행 상태:*\n✅ 실무 릴레이 완료"},
-                {"type": "mrkdwn", "text": f"*산출물 경로:*\n`{target_project_dir_rel}`"}
-            ]
-            ceo_action_elements = [
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "💬 원본 토론 스레드 바로가기", "emoji": True},
-                    "url": permalink or "https://slack.com"
-                }
-            ]
+            ceo_brief_msg = (
+                f"📋 *[CEO 업무 브리핑]* {summary_text}\n"
+                f"• 👥 투입 에이전트: `{relay_path}`\n"
+                f"• 📁 산출물 경로: `{target_project_dir_rel}`\n"
+                f"• 📋 산출물 목록:\n{file_list_str if info['files'] else '• 담당 에이전트 실무 처리 완료'}"
+            )
+        post_as_agent(ceo_chan, "CEO", ceo_brief_msg)
 
-        ceo_blocks = [
-            {
-                "type": "header",
-                "text": {"type": "plain_text", "text": "📋 [CEO 프로젝트 완료 브리핑]", "emoji": True}
-            },
-            {
-                "type": "section",
-                "fields": ceo_fields
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"📋 *생성 산출물 ({info['total_files']}개)*:\n{file_list_str if info['files'] else '• 담당 에이전트 실무 처리 완료'}"
-                }
-            },
-            {
-                "type": "actions",
-                "elements": ceo_action_elements
-            }
-        ]
-        post_as_agent(ceo_chan, "CEO", f"📋 *[프로젝트 브리핑]* {summary_text}", blocks=ceo_blocks)
-
-    # 3. #output-review: 개발팀장 4대 검수 체크리스트 & 라이브 미리보기 카드
+    # 3. #output-review: 개발팀장 산출물 검수 요청 (미니멀 텍스트)
     review_chan = CHANNEL_MAP.get("output_review")
     if review_chan and len(visited_agents) > 2:
         if has_web:
-            review_blocks = [
-                {
-                    "type": "header",
-                    "text": {"type": "plain_text", "text": "🔍 [개발팀장] 신규 프로젝트 최종 검수 요청", "emoji": True}
-                },
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": (
-                            f"*{summary_text}*\n"
-                            f"개발 실무 릴레이(`사원A~E`)가 완료되어 최종 사용자 검수를 요청합니다.\n\n"
-                            f"👉 *{preview_label}*: <{preview_url}|{preview_url}>\n"
-                            f"📁 *[산출물 디렉토리]*: `{target_project_dir_rel}`"
-                        )
-                    }
-                },
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": (
-                            "📋 *[4대 필수 검수 체크리스트]*\n"
-                            "1️⃣ *요구 기능 구현*: 사용자 요청 기능 및 갤러리/UI 컴포넌트 완료\n"
-                            "2️⃣ *DESIGN.md 준수*: 큐레이션 폰트, 단일 주조색, AI 클리셰 5대 금지 통과\n"
-                            "3️⃣ *QA & 보안 검증*: 사원D 모의 침투 및 파일 유효성 검증 완료\n"
-                            "4️⃣ *주요 생성 파일*:\n" + file_list_str
-                        )
-                    }
-                },
-                {
-                    "type": "actions",
-                    "elements": [
-                        {
-                            "type": "button",
-                            "text": {"type": "plain_text", "text": "🚀 웹페이지 라이브 미리보기 (Live Preview)", "emoji": True},
-                            "url": preview_url,
-                            "style": "primary"
-                        },
-                        {
-                            "type": "button",
-                            "text": {"type": "plain_text", "text": "✅ 최종 승인 (Approve)", "emoji": True},
-                            "value": f"approved_{project_slug}",
-                            "action_id": "approve_dev_output"
-                        },
-                        {
-                            "type": "button",
-                            "text": {"type": "plain_text", "text": "🔄 수정 요청 (Reject)", "emoji": True},
-                            "style": "danger",
-                            "value": f"reject_{project_slug}",
-                            "action_id": "reject_dev_output"
-                        }
-                    ]
-                }
-            ]
-            fallback_msg = f"🔍 *[검수 요청]* {summary_text}\n🌐 라이브 뷰어: {preview_url}\n📁 경로: `{info['project_dir_rel']}`"
-            post_as_agent(review_chan, "개발팀장", fallback_msg, blocks=review_blocks)
-        elif info["files"]:
-            review_blocks = [
-                {
-                    "type": "header",
-                    "text": {"type": "plain_text", "text": "🔍 [실무팀] 산출물 검수 요청", "emoji": True}
-                },
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": (
-                            f"*{summary_text}*\n"
-                            f"실무 릴레이가 완료되어 산출물 검수를 요청합니다.\n\n"
-                            f"📁 *[산출물 디렉토리]*: `{target_project_dir_rel}`\n"
-                            f"📋 *생성 파일*:\n{file_list_str}"
-                        )
-                    }
-                }
-            ]
-            post_as_agent(review_chan, "개발팀장", f"🔍 *[산출물 검수]* {summary_text}", blocks=review_blocks)
+            review_msg = (
+                f"🔍 *[개발팀장 산출물 검수 요청]* {summary_text}\n"
+                f"• 👥 실무 릴레이: `{relay_path}`\n"
+                f"• {preview_label}: <{preview_url}|{preview_url}>\n"
+                f"• 📁 산출물 디렉토리: `{target_project_dir_rel}`\n"
+                f"• 📋 주요 생성 파일:\n{file_list_str}\n\n"
+                f"👉 검토 후 승인(Approve) 또는 수정 요청(Reject)을 전달해 주시기 바랍니다."
+            )
+        else:
+            review_msg = (
+                f"🔍 *[실무팀 산출물 검수 요청]* {summary_text}\n"
+                f"• 👥 실무 릴레이: `{relay_path}`\n"
+                f"• 📁 산출물 디렉토리: `{target_project_dir_rel}`\n"
+                f"• 📋 산출물 목록:\n{file_list_str}\n\n"
+                f"👉 산출물 확인 후 승인 또는 피드백을 전달해 주시기 바랍니다."
+            )
+        post_as_agent(review_chan, "개발팀장", review_msg)
 
 
 @app.event("app_mention")
