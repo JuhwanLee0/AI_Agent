@@ -27,19 +27,32 @@ GROQ_API_KEY = (os.getenv("GROQ_API_KEY_1") or os.getenv("GROQ_API_KEY", "")).st
 # ==============================================================================
 # 2. 직급별 모델 설정 (120B / Gemma / Qwen)
 # ==============================================================================
+def normalize_model_name(model_str: str, default: str = "gemini-2.5-flash") -> str:
+    if not model_str:
+        return default
+    if "/" in model_str:
+        return model_str.split("/")[-1]
+    return model_str
+
 MODEL_CEO = os.getenv("MODEL_CEO", "cerebras/gpt-oss-120b").strip()
 MODEL_MANAGER = os.getenv("MODEL_MANAGER", "cerebras/gpt-oss-120b").strip()
 MODEL_WORKER = os.getenv("MODEL_WORKER", "cerebras/gemma-4-31b").strip()
+
+# Fallback keys
+GEMINI_API_KEY_1 = os.getenv("GEMINI_API_KEY_1", "").strip()
+GEMINI_API_KEY_2 = os.getenv("GEMINI_API_KEY_2", "").strip()
+GEMINI_API_KEY_3 = os.getenv("GEMINI_API_KEY_3", "").strip()
+DEFAULT_GEMINI_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 
 def get_gemini_model(role: str = "worker") -> str:
     """역할에 맞는 공식 Gemini 모델 버전 반환"""
     role = role.lower()
     if role in ("ceo", "executive"):
-        return normalize_model_name(MODEL_CEO, "gemini-3.6-flash")
+        return normalize_model_name(MODEL_CEO, "gemini-2.5-flash")
     elif role in ("manager", "lead", "팀장", "verifier", "dev", "개발사원", "개발_사원", "developer"):
-        return normalize_model_name(MODEL_MANAGER, "gemini-3.6-flash")
+        return normalize_model_name(MODEL_MANAGER, "gemini-2.5-flash")
     else:  # worker, 사원, scout, 마케팅, sns
-        return normalize_model_name(MODEL_WORKER, "gemini-3.6-flash")
+        return normalize_model_name(MODEL_WORKER, "gemini-2.5-flash")
 
 GEMINI_MODEL = get_gemini_model("worker")
 

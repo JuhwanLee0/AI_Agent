@@ -2,9 +2,11 @@ import os
 import re
 import sys
 import time
+import json
 import logging
 import threading
 from pathlib import Path
+from typing import Dict, Any, List, Optional, Tuple
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 from dotenv import load_dotenv
 from slack_bolt import App
@@ -103,77 +105,118 @@ def get_web_port() -> int:
 # 에이전트 상세 활동 및 코드 전문 저장소 (메모리 + 디스크 영구 저장)
 LOGS_FILE = PROJECT_ROOT / "ai_company" / "memory" / "agent_full_logs.json"
 AGENT_FULL_LOGS: dict = {}
+_LOGS_LOCK = threading.Lock()
 
 def _load_agent_logs() -> dict:
     global AGENT_FULL_LOGS
-    try:
-        if LOGS_FILE.exists():
-            with open(LOGS_FILE, "r", encoding="utf-8") as f:
-                AGENT_FULL_LOGS = json.load(f)
-    except Exception:
-        AGENT_FULL_LOGS = {}
+    with _LOGS_LOCK:
+        try:
+            if LOGS_FILE.exists():
+                with open(LOGS_FILE, "r", encoding="utf-8") as f:
+                    AGENT_FULL_LOGS = json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to read agent logs from disk: {e}")
+            if not AGENT_FULL_LOGS:
+                AGENT_FULL_LOGS = {}
     return AGENT_FULL_LOGS
 
 def _save_agent_log(log_id: str, data: dict):
     global AGENT_FULL_LOGS
-    _load_agent_logs()
-    AGENT_FULL_LOGS[log_id] = data
-    try:
-        LOGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        # 최대 100개 로그만 유지
-        if len(AGENT_FULL_LOGS) > 100:
-            keys_to_del = list(AGENT_FULL_LOGS.keys())[:-100]
-            for k in keys_to_del:
-                del AGENT_FULL_LOGS[k]
-        with open(LOGS_FILE, "w", encoding="utf-8") as f:
-            json.dump(AGENT_FULL_LOGS, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logger.warning(f"Failed to persist agent log to disk: {e}")
+    with _LOGS_LOCK:
+        try:
+            if LOGS_FILE.exists():
+                try:
+                    with open(LOGS_FILE, "r", encoding="utf-8") as f:
+                        AGENT_FULL_LOGS = json.load(f)
+                except Exception:
+                    pass
+            AGENT_FULL_LOGS[log_id] = data
+            LOGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            # 최대 100개 로그만 유지
+            if len(AGENT_FULL_LOGS) > 100:
+                keys_to_del = list(AGENT_FULL_LOGS.keys())[:-100]
+                for k in keys_to_del:
+                    del AGENT_FULL_LOGS[k]
+            with open(LOGS_FILE, "w", encoding="utf-8") as f:
+                json.dump(AGENT_FULL_LOGS, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to persist agent log to disk: {e}")
 
 _load_agent_logs()
 
 def extract_compact_summary(agent_name: str, full_text: str) -> str:
     """
-    에이전트의 긴 전체 텍스트에서 3~5줄 핵심 요약본을 추출
-    (불필요한 코드 덩어리를 걷어내고 핵심 의사결정 및 인수인계 사항만 정돈)
+    에이전트의 긴 전체 텍스트에서 3~6줄 핵심 요약본을 스마트 추출
+    (도구 실행 내역, 생성 파일, 핵심 의사결정, 인수인계 태그 정돈)
     """
-    lines = [line.strip() for line in full_text.split("\n") if line.strip()]
-    if not lines:
+    if not full_text or not full_text.strip():
         return "작업 완료"
+
+    lines = [line.strip() for line in full_text.split("\n") if line.strip()]
     
-    clean_lines = []
+    tools_used = []
+    summary_lines = []
+    tag_lines = []
+
     for line in lines:
-        line_clean = re.sub(r'\[TOOL:write_file\s+path="([^"]+)"[^\]]*\]', r'📁 *[파일생성]* `\1`', line)
-        line_clean = re.sub(r'\[TOOL:read_file\s+path="([^"]+)"[^\]]*\]', r'📄 *[파일참조]* `\1`', line_clean)
-        line_clean = re.sub(r'\[TOOL:run_command\s+command="([^"]+)"[^\]]*\]', r'⚙️ *[명령실행]* `\1`', line_clean)
-        line_clean = re.sub(r'\[TOOL:playwright_browse\s+url="([^"]+)"[^\]]*\]', r'🌐 *[웹분석]* `\1`', line_clean)
+        # 도구 실행 매칭
+        w_match = re.findall(r'\[TOOL:write_file\s+path="([^"]+)"[^\]]*\]', line)
+        for w in w_match:
+            tools_used.append(f"📁 *[파일생성]* `{w}`")
         
-        # 긴 코드 블록 마커는 생략
-        if line_clean.startswith("```") or line_clean.startswith("<div") or line_clean.startswith("import ") or line_clean.startswith("from "):
+        r_match = re.findall(r'\[TOOL:read_file\s+path="([^"]+)"[^\]]*\]', line)
+        for r in r_match:
+            tools_used.append(f"📄 *[참조]* `{r}`")
+            
+        c_match = re.findall(r'\[TOOL:run_command\s+command="([^"]+)"[^\]]*\]', line)
+        for c in c_match:
+            tools_used.append(f"⚙️ *[실행]* `{c[:40]}`")
+
+        b_match = re.findall(r'\[TOOL:playwright_browse\s+url="([^"]+)"[^\]]*\]', line)
+        for b in b_match:
+            tools_used.append(f"🌐 *[분석]* `{b[:40]}`")
+
+        # 태그 라인
+        if "@" in line and any(k in line for k in AGENTS.keys()):
+            clean_tag = line.replace("#", "").strip()
+            if clean_tag not in tag_lines:
+                tag_lines.append(clean_tag)
             continue
-        clean_lines.append(line_clean)
-        
-    summary_parts = []
-    tag_line = ""
-    for l in clean_lines:
-        if "@" in l and any(k in l for k in AGENTS.keys()):
-            tag_line = l
-            break
+
+        # 불필요한 코드 블록 / 마크다운 기호 정제
+        if any(line.startswith(prefix) for prefix in ["```", "<div", "import ", "from ", "{", "}", "const ", "def ", "class "]):
+            continue
             
-    # 앞쪽 주요 문장 3~4줄
-    for l in clean_lines[:4]:
-        if l not in summary_parts and l != tag_line:
-            summary_parts.append(l)
-            
-    if tag_line and tag_line not in summary_parts:
-        summary_parts.append(f"\n👉 *인수인계*: {tag_line}")
+        clean = re.sub(r'^#+\s*', '', line).strip()
+        clean = re.sub(r'\[TOOL:[^\]]+\]', '', clean).strip()
         
-    res = "\n".join(summary_parts[:5])
-    return res if len(res) <= 800 else (res[:790] + "...")
+        if clean and len(clean) > 3 and clean not in summary_lines:
+            summary_lines.append(clean)
+
+    out_parts = []
+    
+    # 1. 도구 및 파일 작업 요약 (최대 2개)
+    for t in tools_used[:2]:
+        out_parts.append(t)
+
+    # 2. 본문 핵심 문장 (최대 3개)
+    for s in summary_lines[:3]:
+        if s not in out_parts:
+            out_parts.append(f"• {s}")
+
+    # 3. 인수인계 라인
+    if tag_lines:
+        out_parts.append(f"👉 *인수인계*: {tag_lines[0]}")
+
+    if not out_parts:
+        out_parts.append("• 작업이 성공적으로 완료되었습니다.")
+
+    res = "\n".join(out_parts[:5])
+    return res if len(res) <= 1000 else (res[:990] + "...")
 
 def post_as_agent_with_summary(channel: str, agent_name: str, full_text: str, thread_ts: str = None):
     """
-    에이전트 메시지를 '요약본 카드'로 출력하고, '전체본 보기' 버튼을 제공
+    에이전트 메시지를 '요약본 카드'로 출력하고, '전체본 보기(모달)' 및 '스레드 펼치기' 버튼을 제공
     """
     if not channel or not is_slack_configured:
         if not is_slack_configured:
@@ -195,8 +238,8 @@ def post_as_agent_with_summary(channel: str, agent_name: str, full_text: str, th
     }
     _save_agent_log(log_id, log_entry)
     
-    # 200자 이하의 매우 짧은 텍스트는 그대로 전송
-    if len(full_text.strip()) <= 200 and "[TOOL:" not in full_text:
+    # 150자 이하의 매우 짧은 텍스트는 그대로 전송
+    if len(full_text.strip()) <= 150 and "[TOOL:" not in full_text:
         post_as_agent(channel, agent_name, full_text, thread_ts=thread_ts)
         return
     
@@ -216,9 +259,15 @@ def post_as_agent_with_summary(channel: str, agent_name: str, full_text: str, th
             "elements": [
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "📜 전체 활동 및 코드 보기 (상세 전문)", "emoji": True},
+                    "text": {"type": "plain_text", "text": "📜 전체 활동 & 코드 보기", "emoji": True},
                     "value": log_id,
                     "action_id": "view_agent_full_log"
+                },
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "💬 스레드에 전문 펼치기", "emoji": True},
+                    "value": log_id,
+                    "action_id": "expand_agent_log_to_thread"
                 }
             ]
         }
@@ -227,36 +276,32 @@ def post_as_agent_with_summary(channel: str, agent_name: str, full_text: str, th
     post_as_agent(channel, agent_name, f"📋 *[{agent_name} 요약]* {summary[:120]}...", thread_ts=thread_ts, blocks=blocks)
 
 def get_server_host() -> str:
-    """GCP 메타데이터 서버 / 공인 IP / 환경변수 SERVER_HOST 자동 감지"""
+    """
+    서버 호스트 주소 반환:
+    1. 환경변수 SERVER_HOST가 명시적으로 설정된 경우 해당 값 사용
+    2. GCP 메타데이터 서버가 응답하는 경우 (GCP VM 배포 환경) 외부 IP 사용
+    3. 그 외 기본 로컬 개발 환경(Mac/PC)에서는 무조건 'localhost' 반환 (배포 미진행 상태)
+    """
     # 1. 환경변수 우선
     host = os.getenv("SERVER_HOST", "").strip()
     if host and host not in ("localhost", "127.0.0.1"):
         return host
         
-    # 2. GCP 메타데이터 서버 (GCP VM 환경)
+    # 2. GCP 메타데이터 서버 (실제 GCP VM 인스턴스인 경우에만 감지)
     try:
         import urllib.request
         req = urllib.request.Request(
             "http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip",
             headers={"Metadata-Flavor": "Google"}
         )
-        with urllib.request.urlopen(req, timeout=0.5) as resp:
+        with urllib.request.urlopen(req, timeout=0.3) as resp:
             ip = resp.read().decode("utf-8").strip()
-            if ip:
+            if ip and not ip.startswith("127."):
                 return ip
     except Exception:
         pass
 
-    # 3. 공인 IP API (ipify)
-    try:
-        import urllib.request
-        with urllib.request.urlopen("https://api.ipify.org", timeout=1.5) as resp:
-            ip = resp.read().decode("utf-8").strip()
-            if ip:
-                return ip
-    except Exception:
-        pass
-
+    # 3. 로컬 기본값 (ipify 같은 외부 공인 IP 조회는 포트포워딩 미설정 시 접속 불가하므로 제거)
     return "localhost"
 
 def upload_project_files_to_slack(channel: str, thread_ts: str, project_dir_rel: str):
@@ -314,32 +359,39 @@ def get_message_permalink(channel: str, message_ts: str) -> str:
 
 def extract_clean_project_slug_and_title(user_prompt: str) -> Tuple[str, str]:
     """
-    사용자 프롬프트에서 외부 URL을 정제하여 순수 프로젝트 슬러그와 슬랙 표시용 깔끔한 제목 생성
-    (예: 'https://www.treeoflifemissions.com 사이트 만들어줘' -> slug: 'tree-of-life-missions', title: '🌐 [신규 웹 제작] Tree of Life Missions')
+    사용자 프롬프트에서 외부 URL 또는 키워드를 정제하여 순수 프로젝트 슬러그와 슬랙 표시용 깔끔한 제목 생성
     """
+    # 1. 외부 URL이 포함된 경우
     url_match = re.search(r'https?://(?:www\.)?([^/\s]+)', user_prompt)
     if url_match:
         domain = url_match.group(1).split('.')[0]
-        # 도메인 이름 하이픈 분리
         slug = re.sub(r'[^a-zA-Z0-9]+', '-', domain).strip('-').lower() or "custom-web"
         clean_name = domain.replace("-", " ").title()
         title = f"🌐 [웹사이트 리디자인/제작] {clean_name}"
         return slug, title
     
-    # 일반 텍스트인 경우
+    # 2. 특정 기존 프로젝트 키워드가 명시된 경우 (예: tree of life)
+    lowered = user_prompt.lower()
+    if "tree" in lowered and "life" in lowered:
+        return "tree-of-life-missions", "🌐 [웹사이트 리디자인/제작] Tree Of Life Missions"
+
+    # 3. 일반 텍스트인 경우
     clean_text = re.sub(r'https?://[^\s]+', '', user_prompt).strip()
     safe_slug = re.sub(r'[^a-zA-Z0-9가-힣]+', '-', clean_text[:20]).strip('-').lower() or "ai-project"
     title = f"🚀 [프로젝트] {clean_text[:30]}" + ("..." if len(clean_text) > 30 else "")
     return safe_slug, title
 
 def get_project_summary_info(target_proj_dir_rel: str = "", user_prompt: str = "") -> dict:
-    """생성된 프로젝트 파일 및 산출물 정밀 스캔 및 라이브 프리뷰 링크 정보 생성"""
+    """
+    지정된 대상 프로젝트 디렉토리 내의 실제 산출물 정밀 스캔
+    - 과거 프로젝트 임의 폴백 전역 스캔을 완전히 제거하여 이전 디자인/웹사이트 오염 방지
+    """
     files = []
     has_html = False
     html_rel_path = ""
     target_project_dir_rel = target_proj_dir_rel or ""
     
-    # 1. 전달받은 대상 프로젝트 디렉토리 최우선 검사 (projects/<slug>/)
+    # 전달받은 대상 프로젝트 디렉토리만 검사 (projects/<slug>/)
     if target_project_dir_rel:
         target_path = PROJECT_ROOT / target_project_dir_rel
         if target_path.exists():
@@ -354,25 +406,11 @@ def get_project_summary_info(target_proj_dir_rel: str = "", user_prompt: str = "
                     if rel not in files:
                         files.append(rel)
 
-    # 2. projects/ 폴더 전역 스캔 (최신 수정순)
-    if not has_html:
-        projects_dir = PROJECT_ROOT / "projects"
-        if projects_dir.exists():
-            subdirs = [d for d in projects_dir.iterdir() if d.is_dir() and d.name not in {".git", "node_modules", "__pycache__"}]
-            subdirs.sort(key=lambda d: d.stat().st_mtime, reverse=True)
-            for subdir in subdirs:
-                index_file = subdir / "index.html"
-                if index_file.exists() and not has_html:
-                    has_html = True
-                    html_rel_path = os.path.relpath(index_file, PROJECT_ROOT)
-                    if not target_project_dir_rel:
-                        target_project_dir_rel = os.path.relpath(subdir, PROJECT_ROOT)
-
     return {
         "files": files,
         "total_files": len(files),
         "has_html": has_html,
-        "html_rel_path": html_rel_path or (f"{target_project_dir_rel}/index.html" if target_project_dir_rel else "ai_company/web/index.html"),
+        "html_rel_path": html_rel_path,
         "project_dir_rel": target_project_dir_rel or "projects/default"
     }
 
@@ -559,14 +597,19 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
     info = get_project_summary_info(target_project_dir_rel, user_prompt)
     web_port = get_web_port()
     
-    preview_url = f"http://{host}:{web_port}/{info['html_rel_path']}"
-    orchestrator.tracker.state["current_preview_url"] = preview_url
+    has_web = info["has_html"] and bool(info.get("html_rel_path"))
+    is_local = (host == "localhost" or host.startswith("127."))
+    preview_label = "🌐 로컬 라이브 뷰어 (Local Preview)" if is_local else "🌐 라이브 웹 뷰어 (Live Web)"
+    preview_url = f"http://{host}:{web_port}/{info['html_rel_path']}" if has_web else ""
+
+    if has_web:
+        orchestrator.tracker.state["current_preview_url"] = preview_url
     orchestrator.tracker.save()
     
     file_list_str = "\n".join([f"• `{f}`" for f in info["files"][:6]]) if info["files"] else f"• `{target_project_dir_rel}/index.html` 생성 완료"
 
     # 슬랙 직접 파일 첨부 (GCP 방화벽 상관없이 슬랙에서 HTML/DESIGN.md 바로 열람/다운로드)
-    if target_project_dir_rel:
+    if target_project_dir_rel and has_web:
         upload_project_files_to_slack(channel, thread_ts, target_project_dir_rel)
         rev_chan = CHANNEL_MAP.get("output_review")
         if rev_chan and rev_chan != channel:
@@ -574,20 +617,66 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
 
     # 1. #hq-board: CEO 최종 완료 보고 (원본 스레드에)
     if len(visited_agents) > 2:
-        post_as_agent(
-            channel, "CEO",
-            f"✅ *[프로젝트 완료 보고]* {summary_text}\n"
-            f"• 👥 릴레이: `{relay_path}`\n"
-            f"• 🌐 *신규 라이브 웹 뷰어*: <{preview_url}|{preview_url}>\n"
-            f"• 📁 산출물 디렉토리: `{target_project_dir_rel}`\n"
-            f"• 📋 생성 파일 ({info['total_files']}개):\n{file_list_str}",
-            thread_ts
-        )
+        if has_web:
+            post_as_agent(
+                channel, "CEO",
+                f"✅ *[프로젝트 완료 보고]* {summary_text}\n"
+                f"• 👥 릴레이: `{relay_path}`\n"
+                f"• {preview_label}: <{preview_url}|{preview_url}>\n"
+                f"• 📁 산출물 디렉토리: `{target_project_dir_rel}`\n"
+                f"• 📋 생성 파일 ({info['total_files']}개):\n{file_list_str}",
+                thread_ts
+            )
+        else:
+            post_as_agent(
+                channel, "CEO",
+                f"✅ *[업무 완료 보고]* {summary_text}\n"
+                f"• 👥 릴레이: `{relay_path}`\n"
+                f"• 📁 산출물 디렉토리: `{target_project_dir_rel}`\n"
+                f"• 📋 산출물 목록 ({info['total_files']}개):\n{file_list_str if info['files'] else '• 담당 에이전트 실무 처리 완료'}",
+                thread_ts
+            )
 
     # 2. #ceo-briefing: CEO 일일 다이렉트 상세 보고 카드 (Block Kit)
     ceo_chan = CHANNEL_MAP.get("ceo_report")
     if ceo_chan and len(visited_agents) > 2:
         permalink = get_message_permalink(channel, thread_ts)
+        
+        if has_web:
+            ceo_fields = [
+                {"type": "mrkdwn", "text": f"*프로젝트:*\n{summary_text}"},
+                {"type": "mrkdwn", "text": f"*투입 에이전트 ({len(visited_agents)}명):*\n`{relay_path}`"},
+                {"type": "mrkdwn", "text": f"*{preview_label}:*\n<{preview_url}|{preview_url}>"},
+                {"type": "mrkdwn", "text": f"*산출물 경로:*\n`{target_project_dir_rel}`"}
+            ]
+            ceo_action_elements = [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "🌐 로컬 라이브 웹 열기" if is_local else "🌐 라이브 웹 열기", "emoji": True},
+                    "url": preview_url,
+                    "style": "primary"
+                },
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "💬 원본 토론 스레드 바로가기", "emoji": True},
+                    "url": permalink or "https://slack.com"
+                }
+            ]
+        else:
+            ceo_fields = [
+                {"type": "mrkdwn", "text": f"*업무 목표:*\n{summary_text}"},
+                {"type": "mrkdwn", "text": f"*투입 에이전트 ({len(visited_agents)}명):*\n`{relay_path}`"},
+                {"type": "mrkdwn", "text": f"*진행 상태:*\n✅ 실무 릴레이 완료"},
+                {"type": "mrkdwn", "text": f"*산출물 경로:*\n`{target_project_dir_rel}`"}
+            ]
+            ceo_action_elements = [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "💬 원본 토론 스레드 바로가기", "emoji": True},
+                    "url": permalink or "https://slack.com"
+                }
+            ]
+
         ceo_blocks = [
             {
                 "type": "header",
@@ -595,99 +684,103 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
             },
             {
                 "type": "section",
-                "fields": [
-                    {"type": "mrkdwn", "text": f"*프로젝트:*\n{summary_text}"},
-                    {"type": "mrkdwn", "text": f"*투입 에이전트 ({len(visited_agents)}명):*\n`{relay_path}`"},
-                    {"type": "mrkdwn", "text": f"*신규 라이브 프리뷰:*\n<{preview_url}|{preview_url}>"},
-                    {"type": "mrkdwn", "text": f"*산출물 경로:*\n`{target_project_dir_rel}`"}
-                ]
+                "fields": ceo_fields
             },
             {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"📋 *생성 파일 ({info['total_files']}개)*:\n{file_list_str}"
+                    "text": f"📋 *생성 산출물 ({info['total_files']}개)*:\n{file_list_str if info['files'] else '• 담당 에이전트 실무 처리 완료'}"
                 }
             },
             {
                 "type": "actions",
-                "elements": [
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "🌐 신규 라이브 웹페이지 열기", "emoji": True},
-                        "url": preview_url,
-                        "style": "primary"
-                    },
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "💬 원본 토론 스레드 바로가기", "emoji": True},
-                        "url": permalink or "https://slack.com"
-                    }
-                ]
+                "elements": ceo_action_elements
             }
         ]
-        post_as_agent(ceo_chan, "CEO", f"📋 *[프로젝트 브리핑]* {summary_text} | 라이브 뷰어: {preview_url}", blocks=ceo_blocks)
+        post_as_agent(ceo_chan, "CEO", f"📋 *[프로젝트 브리핑]* {summary_text}", blocks=ceo_blocks)
 
     # 3. #output-review: 개발팀장 4대 검수 체크리스트 & 라이브 미리보기 카드
     review_chan = CHANNEL_MAP.get("output_review")
     if review_chan and len(visited_agents) > 2:
-        review_blocks = [
-            {
-                "type": "header",
-                "text": {"type": "plain_text", "text": "🔍 [개발팀장] 신규 프로젝트 최종 검수 요청", "emoji": True}
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": (
-                        f"*{summary_text}*\n"
-                        f"개발 실무 릴레이(`사원A~E`)가 완료되어 최종 사용자 검수를 요청합니다.\n\n"
-                        f"🌐 *[새로 제작된 웹페이지 라이브 링크]*\n👉 *<{preview_url}|{preview_url}>*\n"
-                        f"📁 *[산출물 디렉토리]*: `{target_project_dir_rel}`"
-                    )
-                }
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": (
-                        "📋 *[4대 필수 검수 체크리스트]*\n"
-                        "1️⃣ *요구 기능 구현*: 사용자 요청 기능 및 갤러리/UI 컴포넌트 완료\n"
-                        "2️⃣ *DESIGN.md 준수*: 큐레이션 폰트, 단일 주조색, AI 클리셰 5대 금지 통과\n"
-                        "3️⃣ *QA & 보안 검증*: 사원D 모의 침투 및 파일 유효성 검증 완료\n"
-                        "4️⃣ *주요 생성 파일*:\n" + file_list_str
-                    )
-                }
-            },
-            {
-                "type": "actions",
-                "elements": [
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "🚀 웹페이지 라이브 미리보기 (Live Preview)", "emoji": True},
-                        "url": preview_url,
-                        "style": "primary"
-                    },
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "✅ 최종 승인 (Approve)", "emoji": True},
-                        "value": f"approved_{project_folder_name}",
-                        "action_id": "approve_dev_output"
-                    },
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "🔄 수정 요청 (Reject)", "emoji": True},
-                        "style": "danger",
-                        "value": f"reject_{project_folder_name}",
-                        "action_id": "reject_dev_output"
+        if has_web:
+            review_blocks = [
+                {
+                    "type": "header",
+                    "text": {"type": "plain_text", "text": "🔍 [개발팀장] 신규 프로젝트 최종 검수 요청", "emoji": True}
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": (
+                            f"*{summary_text}*\n"
+                            f"개발 실무 릴레이(`사원A~E`)가 완료되어 최종 사용자 검수를 요청합니다.\n\n"
+                            f"👉 *{preview_label}*: <{preview_url}|{preview_url}>\n"
+                            f"📁 *[산출물 디렉토리]*: `{target_project_dir_rel}`"
+                        )
                     }
-                ]
-            }
-        ]
-        fallback_msg = f"🔍 *[검수 요청]* {summary_text}\n🌐 라이브 뷰어: {preview_url}\n📁 경로: `{info['project_dir_rel']}`"
-        post_as_agent(review_chan, "개발팀장", fallback_msg, blocks=review_blocks)
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": (
+                            "📋 *[4대 필수 검수 체크리스트]*\n"
+                            "1️⃣ *요구 기능 구현*: 사용자 요청 기능 및 갤러리/UI 컴포넌트 완료\n"
+                            "2️⃣ *DESIGN.md 준수*: 큐레이션 폰트, 단일 주조색, AI 클리셰 5대 금지 통과\n"
+                            "3️⃣ *QA & 보안 검증*: 사원D 모의 침투 및 파일 유효성 검증 완료\n"
+                            "4️⃣ *주요 생성 파일*:\n" + file_list_str
+                        )
+                    }
+                },
+                {
+                    "type": "actions",
+                    "elements": [
+                        {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "🚀 웹페이지 라이브 미리보기 (Live Preview)", "emoji": True},
+                            "url": preview_url,
+                            "style": "primary"
+                        },
+                        {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "✅ 최종 승인 (Approve)", "emoji": True},
+                            "value": f"approved_{project_slug}",
+                            "action_id": "approve_dev_output"
+                        },
+                        {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "🔄 수정 요청 (Reject)", "emoji": True},
+                            "style": "danger",
+                            "value": f"reject_{project_slug}",
+                            "action_id": "reject_dev_output"
+                        }
+                    ]
+                }
+            ]
+            fallback_msg = f"🔍 *[검수 요청]* {summary_text}\n🌐 라이브 뷰어: {preview_url}\n📁 경로: `{info['project_dir_rel']}`"
+            post_as_agent(review_chan, "개발팀장", fallback_msg, blocks=review_blocks)
+        elif info["files"]:
+            review_blocks = [
+                {
+                    "type": "header",
+                    "text": {"type": "plain_text", "text": "🔍 [실무팀] 산출물 검수 요청", "emoji": True}
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": (
+                            f"*{summary_text}*\n"
+                            f"실무 릴레이가 완료되어 산출물 검수를 요청합니다.\n\n"
+                            f"📁 *[산출물 디렉토리]*: `{target_project_dir_rel}`\n"
+                            f"📋 *생성 파일*:\n{file_list_str}"
+                        )
+                    }
+                }
+            ]
+            post_as_agent(review_chan, "개발팀장", f"🔍 *[산출물 검수]* {summary_text}", blocks=review_blocks)
 
 
 @app.event("app_mention")
@@ -1081,6 +1174,49 @@ def handle_view_agent_full_log(ack, body, client):
             )
         except Exception as e2:
             logger.error(f"Thread fallback post failed: {e2}")
+
+
+@app.action("expand_agent_log_to_thread")
+def handle_expand_agent_log_to_thread(ack, body, client):
+    """
+    '스레드에 전문 펼치기' 버튼 클릭 시 해당 메시지 스레드 댓글로 전문 바로 게시
+    """
+    ack()
+    action_val = body.get("actions", [{}])[0].get("value", "")
+    channel = body.get("channel", {}).get("id", "")
+    message_ts = body.get("message", {}).get("ts", "")
+    
+    logs = _load_agent_logs()
+    log_data = logs.get(action_val) or AGENT_FULL_LOGS.get(action_val)
+    
+    if not log_data:
+        if channel and message_ts:
+            try:
+                client.chat_postMessage(
+                    channel=channel,
+                    thread_ts=message_ts,
+                    text="⚠️ 상세 전문 로그를 불러오지 못했습니다. (메모리 만료 또는 서버 재시작)"
+                )
+            except Exception:
+                pass
+        return
+
+    agent_name = log_data.get("agent", "에이전트")
+    role = log_data.get("role", "전문가")
+    full_text = log_data.get("full_text", "")
+    
+    if channel and message_ts:
+        chunks = [full_text[i:i+3500] for i in range(0, len(full_text), 3500)] or ["(내용 없음)"]
+        for idx, chunk in enumerate(chunks[:3]):
+            header = f"📜 *[{agent_name} ({role}) 활동 및 코드 전문 ({idx+1}/{len(chunks)})]*\n" if len(chunks) > 1 else f"📜 *[{agent_name} ({role}) 활동 및 코드 전문]*\n"
+            try:
+                client.chat_postMessage(
+                    channel=channel,
+                    thread_ts=message_ts,
+                    text=f"{header}```{chunk}```"
+                )
+            except Exception as e:
+                logger.error(f"Thread expand post failed: {e}")
 
 
 def start_local_dashboard_server(initial_port: int = 8080):

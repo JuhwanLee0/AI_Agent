@@ -148,17 +148,45 @@ class ClaudeMemManager:
 
         return "<claude-mem-context>\n# Memory Context from Past Sessions\n" + "\n".join(memories) + "\n</claude-mem-context>"
 
+    def synthesize_decision_with_groq(self, agent_name: str, full_text: str) -> str:
+        """Groq API(llama-3.3-70b / gpt-oss-20b)를 활용하여 긴 활동에서 1~2줄 핵심 결정/학습 기억 자동 추출"""
+        groq_key = (os.getenv("GROQ_API_KEY_1") or os.getenv("GROQ_API_KEY_2") or os.getenv("GROQ_API_KEY", "")).strip()
+        if not groq_key or len(full_text) < 100:
+            return full_text[:200].replace("\n", " ")
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=groq_key, base_url="https://api.groq.com/openai/v1", timeout=8.0)
+            res = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": "You are a concise memory compressor. Extract exactly 1-2 Korean sentences summarizing the key decisions, architectural rules, or deliverables from this agent output. Output only the summarized text without preamble."},
+                    {"role": "user", "content": full_text[:3000]}
+                ],
+                max_tokens=200,
+                temperature=0.3
+            )
+            if res.choices and res.choices[0].message.content:
+                return res.choices[0].message.content.strip()
+        except Exception as e:
+            logger.debug(f"[claude-mem] Groq memory synthesis fallback: {e}")
+        return full_text[:200].replace("\n", " ")
+
     def record_decision(self, department: str, agent_name: str, observation: str):
-        """새로운 결정사항/피드백을 장기 기억에 저장"""
+        """새로운 결정사항/피드백을 장기 기억에 저장 (Groq 지능형 요약 지원)"""
         import datetime
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # 긴 텍스트인 경우 Groq API로 1~2문장 핵심 기억 합성
+        if len(observation) > 150:
+            observation = self.synthesize_decision_with_groq(agent_name, observation)
+            
         entry = {"agent": agent_name, "text": observation, "time": timestamp}
         
         if department not in self.local_memories:
             self.local_memories[department] = []
         self.local_memories[department].append(entry)
         self._save_local_memory()
-        logger.info(f"[claude-mem] Recorded memory for {agent_name} ({department})")
+        logger.info(f"[claude-mem] Recorded Groq-synthesized memory for {agent_name} ({department})")
 
 
 # ----------------------------------------------------
