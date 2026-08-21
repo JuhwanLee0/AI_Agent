@@ -93,6 +93,13 @@ def post_as_agent(channel: str, agent_name: str, text: str, thread_ts: str = Non
                 logger.error(f"Auto-join failed for {channel}: {e2}")
         logger.error(f"Failed to post message as {agent_name}: {e}")
 
+# 웹 대시보드 및 산출물 서빙 포트 설정 (기본값 8080, 충돌 시 자동 폴백)
+CURRENT_WEB_PORT: int = int(os.getenv("WEB_PORT", "8080"))
+
+def get_web_port() -> int:
+    global CURRENT_WEB_PORT
+    return CURRENT_WEB_PORT
+
 # 에이전트 상세 활동 및 코드 전문 저장소 (메모리 + 디스크 영구 저장)
 LOGS_FILE = PROJECT_ROOT / "ai_company" / "memory" / "agent_full_logs.json"
 AGENT_FULL_LOGS: dict = {}
@@ -550,8 +557,9 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
     summary_text = display_title
     host = get_server_host()
     info = get_project_summary_info(target_project_dir_rel, user_prompt)
+    web_port = get_web_port()
     
-    preview_url = f"http://{host}:8080/{info['html_rel_path']}"
+    preview_url = f"http://{host}:{web_port}/{info['html_rel_path']}"
     orchestrator.tracker.state["current_preview_url"] = preview_url
     orchestrator.tracker.save()
     
@@ -1075,17 +1083,33 @@ def handle_view_agent_full_log(ack, body, client):
             logger.error(f"Thread fallback post failed: {e2}")
 
 
-def start_local_dashboard_server(port: int = 8080):
+def start_local_dashboard_server(initial_port: int = 8080):
     """초경량 로컬 웹 대시보드 및 산출물 서빙 서버 (projects/ 및 output/ 라이브 렌더링)"""
+    global CURRENT_WEB_PORT
     import functools
     serve_dir = str(PROJECT_ROOT)
     handler = functools.partial(SimpleHTTPRequestHandler, directory=serve_dir)
-    try:
-        httpd = HTTPServer(("0.0.0.0", port), handler)
-        logger.info(f"Live Project & Dashboard Server running at http://0.0.0.0:{port}/")
-        httpd.serve_forever()
-    except Exception as e:
-        logger.warning(f"Could not start local web server: {e}")
+
+    configured_port = int(os.getenv("WEB_PORT", str(initial_port)))
+    candidate_ports = [configured_port, 8080, 8090, 8088, 8085, 8091, 3000, 8000]
+    seen = set()
+    unique_ports = [p for p in candidate_ports if not (p in seen or seen.add(p))]
+
+    for port in unique_ports:
+        try:
+            httpd = HTTPServer(("0.0.0.0", port), handler)
+            CURRENT_WEB_PORT = port
+            orchestrator.tracker.state["web_port"] = port
+            orchestrator.tracker.save()
+            logger.info(f"🚀 Live Project & Dashboard Server running at http://0.0.0.0:{port}/ (Serving projects/ & output/)")
+            httpd.serve_forever()
+            break
+        except OSError as e:
+            logger.warning(f"Port {port} in use or unavailable ({e}), trying next candidate port...")
+            continue
+        except Exception as e:
+            logger.error(f"Error starting web server on port {port}: {e}")
+            break
 
 
 def dynamic_scheduler_loop():
