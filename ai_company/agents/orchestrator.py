@@ -380,7 +380,7 @@ class AgentConfig:
         instruction_file: str,
         api_key_env: str,
         model_env: str = "MODEL_MANAGER",
-        default_model: str = "gemini-2.5-flash",
+        default_model: str = "gemini-3.6-flash",
         avatar_name: str = "robot"
     ):
         self.name = name
@@ -411,39 +411,40 @@ class AgentConfig:
         raw = os.getenv(self.model_env, self.default_model).strip().lower()
         if raw in ("3.5-lite", "3.5 lite", "3.5_lite", "lite", "gemini-3.5-lite", "gemini-2.0-flash-lite", "flash-lite"):
             return "gemini-2.0-flash-lite"
-        elif raw in ("3.6", "3.6 flash", "3.6-flash", "3.7", "3.7 flash", "gemini-3.6", "gemini-3.6-flash"):
-            return "gemini-2.5-flash"
+        elif raw in ("3.6", "3.6 flash", "3.6-flash", "3.7", "3.7 flash", "gemini-3.6", "gemini-3.6-flash", "gemini-2.5-flash"):
+            return "gemini-3.6-flash"
         elif raw in ("3.5", "3.5 flash", "3.5-flash", "gemini-3.5", "gemini-3.5-flash"):
             return "gemini-2.0-flash"
         return raw
 
 
 AGENTS: Dict[str, AgentConfig] = {
-    # 경영진 (CEO: 3.6 flash 통일)
-    "CEO": AgentConfig("CEO", "최고경영자", "executive", "ceo_instruction.md", "GEMINI_API_KEY_CEO", "MODEL_CEO", "gemini-2.5-flash", "briefcase"),
+    # 경영진 (CEO: gemini-3.6-flash 통일)
+    "CEO": AgentConfig("CEO", "최고경영자", "executive", "ceo_instruction.md", "GEMINI_API_KEY_CEO", "MODEL_CEO", "gemini-3.6-flash", "briefcase"),
     
     # 개발본부 (개발사원은 팀장과 동일한 Key 2 및 MODEL_MANAGER 적용)
-    "개발팀장": AgentConfig("개발팀장", "Technical Lead & Scrum Master", "dev", "dev_instruction.md", "GEMINI_API_KEY_DEV", "MODEL_MANAGER", "gemini-2.5-flash", "hammer_and_wrench"),
-    "개발_사원A": AgentConfig("개발_사원A", "System Architect", "dev", "dev_instruction.md", "GEMINI_API_KEY_DEV", "MODEL_MANAGER", "gemini-2.5-flash", "building_construction"),
-    "개발_사원B": AgentConfig("개발_사원B", "Backend & Data Engineer / Security", "dev", "dev_instruction.md", "GEMINI_API_KEY_DEV", "MODEL_MANAGER", "gemini-2.5-flash", "shield"),
-    "개발_사원C": AgentConfig("개발_사원C", "Frontend & UI / Payment UX", "dev", "dev_instruction.md", "GEMINI_API_KEY_DEV", "MODEL_MANAGER", "gemini-2.5-flash", "credit_card"),
-    "개발_사원D": AgentConfig("개발_사원D", "QA & Penetration Engineer", "dev", "dev_instruction.md", "GEMINI_API_KEY_DEV", "MODEL_MANAGER", "gemini-2.5-flash", "mag"),
-    "개발_사원E": AgentConfig("개발_사원E", "DevOps & Infra Engineer", "dev", "dev_instruction.md", "GEMINI_API_KEY_DEV", "MODEL_MANAGER", "gemini-2.5-flash", "cloud"),
+    "개발팀장": AgentConfig("개발팀장", "Technical Lead & Scrum Master", "dev", "dev_instruction.md", "GEMINI_API_KEY_DEV", "MODEL_MANAGER", "gemini-3.6-flash", "hammer_and_wrench"),
+    "개발_사원A": AgentConfig("개발_사원A", "System Architect", "dev", "dev_instruction.md", "GEMINI_API_KEY_DEV", "MODEL_MANAGER", "gemini-3.6-flash", "building_construction"),
+    "개발_사원B": AgentConfig("개발_사원B", "Backend & Data Engineer / Security", "dev", "dev_instruction.md", "GEMINI_API_KEY_DEV", "MODEL_MANAGER", "gemini-3.6-flash", "shield"),
+    "개발_사원C": AgentConfig("개발_사원C", "Frontend & UI / Payment UX", "dev", "dev_instruction.md", "GEMINI_API_KEY_DEV", "MODEL_MANAGER", "gemini-3.6-flash", "credit_card"),
+    "개발_사원D": AgentConfig("개발_사원D", "QA & Penetration Engineer", "dev", "dev_instruction.md", "GEMINI_API_KEY_DEV", "MODEL_MANAGER", "gemini-3.6-flash", "mag"),
+    "개발_사원E": AgentConfig("개발_사원E", "DevOps & Infra Engineer", "dev", "dev_instruction.md", "GEMINI_API_KEY_DEV", "MODEL_MANAGER", "gemini-3.6-flash", "cloud"),
 
     # 마케팅본부
-    "마케팅팀장": AgentConfig("마케팅팀장", "Marketing Director", "marketing", "marketing_instruction.md", "GEMINI_API_KEY_MARKETING", "MODEL_MANAGER", "gemini-2.5-flash", "chart_with_upwards_trend"),
-    "마케팅_사원A": AgentConfig("마케팅_사원A", "Trend & Material Analyst", "marketing", "marketing_instruction.md", "GEMINI_API_KEY_MARKETING", "MODEL_WORKER", "gemini-2.5-flash", "telescope"),
-    "마케팅_사원B": AgentConfig("마케팅_사원B", "Content Architect (3막 8장)", "marketing", "marketing_instruction.md", "GEMINI_API_KEY_MARKETING", "MODEL_WORKER", "gemini-2.5-flash", "scroll"),
-    "마케팅_사원C": AgentConfig("마케팅_사원C", "Detail Copywriter & CTA", "marketing", "marketing_instruction.md", "GEMINI_API_KEY_MARKETING", "MODEL_WORKER", "gemini-2.5-flash", "pen"),
-    "마케팅_사원D": AgentConfig("마케팅_사원D", "Visual Prompt Engineer", "marketing", "marketing_instruction.md", "GEMINI_API_KEY_MARKETING", "MODEL_WORKER", "gemini-2.5-flash", "art"),
+    "마케팅팀장": AgentConfig("마케팅팀장", "Marketing Director", "marketing", "marketing_instruction.md", "GEMINI_API_KEY_MARKETING", "MODEL_MANAGER", "gemini-3.6-flash", "chart_with_upwards_trend"),
+    "마케팅_사원A": AgentConfig("마케팅_사원A", "Trend & Material Analyst", "marketing", "marketing_instruction.md", "GEMINI_API_KEY_MARKETING", "MODEL_WORKER", "gemini-3.6-flash", "telescope"),
+    "마케팅_사원B": AgentConfig("마케팅_사원B", "Content Architect (3막 8장)", "marketing", "marketing_instruction.md", "GEMINI_API_KEY_MARKETING", "MODEL_WORKER", "gemini-3.6-flash", "scroll"),
+    "마케팅_사원C": AgentConfig("마케팅_사원C", "Detail Copywriter & CTA", "marketing", "marketing_instruction.md", "GEMINI_API_KEY_MARKETING", "MODEL_WORKER", "gemini-3.6-flash", "pen"),
+    "마케팅_사원D": AgentConfig("마케팅_사원D", "Visual Prompt Engineer", "marketing", "marketing_instruction.md", "GEMINI_API_KEY_MARKETING", "MODEL_WORKER", "gemini-3.6-flash", "art"),
 
     # 미디어본부
-    "미디어팀장": AgentConfig("미디어팀장", "Technical Director", "media", "media_instruction.md", "GEMINI_API_KEY_MEDIA", "MODEL_MANAGER", "gemini-2.5-flash", "movie_camera"),
-    "미디어_사원A": AgentConfig("미디어_사원A", "Dual-Engine Audio Specialist", "media", "media_instruction.md", "GEMINI_API_KEY_MEDIA", "MODEL_WORKER", "gemini-2.5-flash", "sound"),
-    "미디어_사원B": AgentConfig("미디어_사원B", "Visual & Browser Automation Specialist", "media", "media_instruction.md", "GEMINI_API_KEY_MEDIA", "MODEL_WORKER", "gemini-2.5-flash", "globe_with_meridians"),
-    "미디어_사원C": AgentConfig("미디어_사원C", "Compositor & Video Editor", "media", "media_instruction.md", "GEMINI_API_KEY_MEDIA", "MODEL_WORKER", "gemini-2.5-flash", "clapper"),
-    "미디어_사원D": AgentConfig("미디어_사원D", "Platform Staging & Slack Messenger", "media", "media_instruction.md", "GEMINI_API_KEY_MEDIA", "MODEL_WORKER", "gemini-2.5-flash", "package"),
+    "미디어팀장": AgentConfig("미디어팀장", "Technical Director", "media", "media_instruction.md", "GEMINI_API_KEY_MEDIA", "MODEL_MANAGER", "gemini-3.6-flash", "movie_camera"),
+    "미디어_사원A": AgentConfig("미디어_사원A", "Dual-Engine Audio Specialist", "media", "media_instruction.md", "GEMINI_API_KEY_MEDIA", "MODEL_WORKER", "gemini-3.6-flash", "sound"),
+    "미디어_사원B": AgentConfig("미디어_사원B", "Visual & Browser Automation Specialist", "media", "media_instruction.md", "GEMINI_API_KEY_MEDIA", "MODEL_WORKER", "gemini-3.6-flash", "globe_with_meridians"),
+    "미디어_사원C": AgentConfig("미디어_사원C", "Compositor & Video Editor", "media", "media_instruction.md", "GEMINI_API_KEY_MEDIA", "MODEL_WORKER", "gemini-3.6-flash", "clapper"),
+    "미디어_사원D": AgentConfig("미디어_사원D", "Platform Staging & Slack Messenger", "media", "media_instruction.md", "GEMINI_API_KEY_MEDIA", "MODEL_WORKER", "gemini-3.6-flash", "package"),
 }
+
 
 
 # ----------------------------------------------------

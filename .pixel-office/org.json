@@ -12,7 +12,7 @@
       "sprite": "cat_orange",
       "tunic": "#1d2d44",
       "seat": 0,
-      "model": "gemini-2.5-flash",
+      "model": "gemini-3.6-flash",
       "avatar": "briefcase",
       "zone_manual": true
     },
@@ -28,7 +28,7 @@
       "sprite": "cat_grey",
       "tunic": "#0d5c75",
       "seat": 1,
-      "model": "gemini-2.5-flash",
+      "model": "gemini-3.6-flash",
       "avatar": "hammer_and_wrench",
       "zone_manual": true
     },
@@ -44,7 +44,7 @@
       "sprite": "cat_black",
       "tunic": "#1b7a82",
       "seat": 2,
-      "model": "gemini-2.5-flash",
+      "model": "gemini-3.6-flash",
       "avatar": "building_construction",
       "zone_manual": true
     },
@@ -60,7 +60,7 @@
       "sprite": "cat_white",
       "tunic": "#1e6f5c",
       "seat": 3,
-      "model": "gemini-2.5-flash",
+      "model": "gemini-3.6-flash",
       "avatar": "shield",
       "zone_manual": true
     },
@@ -76,7 +76,7 @@
       "sprite": "cat_calico",
       "tunic": "#289672",
       "seat": 4,
-      "model": "gemini-2.5-flash",
+      "model": "gemini-3.6-flash",
       "avatar": "credit_card",
       "zone_manual": true
     },
@@ -92,7 +92,7 @@
       "sprite": "cat_tabby",
       "tunic": "#e07a5f",
       "seat": 5,
-      "model": "gemini-2.5-flash",
+      "model": "gemini-3.6-flash",
       "avatar": "mag",
       "zone_manual": true
     },
@@ -108,7 +108,7 @@
       "sprite": "cat_orange",
       "tunic": "#3d5a80",
       "seat": 6,
-      "model": "gemini-2.5-flash",
+      "model": "gemini-3.6-flash",
       "avatar": "cloud",
       "zone_manual": true
     },
@@ -124,7 +124,7 @@
       "sprite": "cat_grey",
       "tunic": "#c35a38",
       "seat": 7,
-      "model": "gemini-2.5-flash",
+      "model": "gemini-3.6-flash",
       "avatar": "chart_with_upwards_trend",
       "zone_manual": true
     },
@@ -140,7 +140,7 @@
       "sprite": "cat_black",
       "tunic": "#d97736",
       "seat": 8,
-      "model": "gemini-2.5-flash",
+      "model": "gemini-3.6-flash",
       "avatar": "telescope",
       "zone_manual": true
     },
@@ -156,7 +156,7 @@
       "sprite": "cat_white",
       "tunic": "#e28743",
       "seat": 9,
-      "model": "gemini-2.5-flash",
+      "model": "gemini-3.6-flash",
       "avatar": "scroll",
       "zone_manual": true
     },
@@ -172,7 +172,7 @@
       "sprite": "cat_calico",
       "tunic": "#ba5a31",
       "seat": 10,
-      "model": "gemini-2.5-flash",
+      "model": "gemini-3.6-flash",
       "avatar": "pen",
       "zone_manual": true
     },
@@ -188,7 +188,7 @@
       "sprite": "cat_tabby",
       "tunic": "#9a4a28",
       "seat": 11,
-      "model": "gemini-2.5-flash",
+      "model": "gemini-3.6-flash",
       "avatar": "art",
       "zone_manual": true
     },
@@ -204,7 +204,7 @@
       "sprite": "cat_orange",
       "tunic": "#5e3c88",
       "seat": 12,
-      "model": "gemini-2.5-flash",
+      "model": "gemini-3.6-flash",
       "avatar": "movie_camera",
       "zone_manual": true
     },
@@ -220,7 +220,7 @@
       "sprite": "cat_grey",
       "tunic": "#754f9e",
       "seat": 13,
-      "model": "gemini-2.5-flash",
+      "model": "gemini-3.6-flash",
       "avatar": "sound",
       "zone_manual": true
     },
@@ -236,7 +236,7 @@
       "sprite": "cat_black",
       "tunic": "#885fa8",
       "seat": 14,
-      "model": "gemini-2.5-flash",
+      "model": "gemini-3.6-flash",
       "avatar": "globe_with_meridians",
       "zone_manual": true
     },
@@ -252,7 +252,7 @@
       "sprite": "cat_white",
       "tunic": "#6a4591",
       "seat": 15,
-      "model": "gemini-2.5-flash",
+      "model": "gemini-3.6-flash",
       "avatar": "clapper",
       "zone_manual": true
     },
@@ -268,7 +268,7 @@
       "sprite": "cat_calico",
       "tunic": "#4d326f",
       "seat": 16,
-      "model": "gemini-2.5-flash",
+      "model": "gemini-3.6-flash",
       "avatar": "package",
       "zone_manual": true
     }

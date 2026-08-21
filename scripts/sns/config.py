@@ -38,12 +38,12 @@ MODEL_CEO = os.getenv("MODEL_CEO", "3.6").strip()
 MODEL_MANAGER = os.getenv("MODEL_MANAGER", "3.6").strip()
 MODEL_WORKER = os.getenv("MODEL_WORKER", "3.6").strip()
 
-def normalize_model_name(raw_name: str, fallback: str = "gemini-2.5-flash") -> str:
+def normalize_model_name(raw_name: str, fallback: str = "gemini-3.6-flash") -> str:
     """
     사용자 친화적 버전 표기(3.6, 3.5 등)를 Google Gemini 공식 API 엔드포인트명으로 자동 변환
-    - '3.6' / '3.6 flash' / '3.7' -> 'gemini-2.5-flash' (최신 고성능 Flash - 카피라이팅/Whisk 프롬프트 최적)
-    - '3.5-lite' / '3.5 lite'     -> 'gemini-2.0-flash-lite' (초경량 초고속 Flash-Lite)
-    - '3.5' / '3.5 flash'          -> 'gemini-2.0-flash' (표준 고속 Flash)
+    - '3.6' / '3.6 flash' / '3.7' -> 'gemini-3.6-flash'
+    - '3.5-lite' / '3.5 lite'     -> 'gemini-2.0-flash-lite'
+    - '3.5' / '3.5 flash'          -> 'gemini-2.0-flash'
     """
     raw = (raw_name or "").strip().lower()
     if not raw:
@@ -51,8 +51,8 @@ def normalize_model_name(raw_name: str, fallback: str = "gemini-2.5-flash") -> s
     if raw in ("3.5-lite", "3.5 lite", "3.5_lite", "lite", "gemini-3.5-lite", "gemini-2.0-flash-lite", "flash-lite"):
         return "gemini-2.0-flash-lite"
     elif raw in ("3.6", "3.6 flash", "3.6-flash", "3.7", "3.7 flash", "gemini-3.6", "gemini-3.6-flash", "gemini-2.5-flash"):
-        return "gemini-2.5-flash"
-    elif raw in ("3.5", "3.5 flash", "3.5-flash", "gemini-3.5", "gemini-3.5-flash", "gemini-2.0-flash"):
+        return "gemini-3.6-flash"
+    elif raw in ("3.5", "3.5 flash", "3.5-flash", "gemini-3.5", "gemini-3.5-flash"):
         return "gemini-2.0-flash"
     elif not raw.startswith("gemini-"):
         return f"gemini-{raw}"
@@ -62,13 +62,14 @@ def get_gemini_model(role: str = "worker") -> str:
     """역할에 맞는 공식 Gemini 모델 버전 반환"""
     role = role.lower()
     if role in ("ceo", "executive"):
-        return normalize_model_name(MODEL_CEO, "gemini-2.5-flash")
+        return normalize_model_name(MODEL_CEO, "gemini-3.6-flash")
     elif role in ("manager", "lead", "팀장", "verifier", "dev", "개발사원", "개발_사원", "developer"):
-        return normalize_model_name(MODEL_MANAGER, "gemini-2.5-flash")
+        return normalize_model_name(MODEL_MANAGER, "gemini-3.6-flash")
     else:  # worker, 사원, scout, 마케팅, sns
-        return normalize_model_name(MODEL_WORKER, "gemini-2.5-flash")
+        return normalize_model_name(MODEL_WORKER, "gemini-3.6-flash")
 
 GEMINI_MODEL = get_gemini_model("worker")
+
 
 # ==============================================================================
 # 3. ⏱️ Rate Limit (RPM / RPD) 속도 제어기 (429 방지 안전 딜레이)

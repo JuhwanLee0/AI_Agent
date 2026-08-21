@@ -8,7 +8,7 @@
     "sprite": "cat_black",
     "tunic": "#1d2d44",
     "seat": 0,
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.6-flash",
     "file": "ai_company/instructions/ceo_instruction.md"
   },
   {
@@ -20,7 +20,7 @@
     "sprite": "cat_orange",
     "tunic": "#0d5c75",
     "seat": 1,
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.6-flash",
     "file": "ai_company/instructions/dev_instruction.md"
   },
   {
@@ -32,7 +32,7 @@
     "sprite": "cat_grey",
     "tunic": "#1b7a82",
     "seat": 2,
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.6-flash",
     "file": "ai_company/instructions/dev_instruction.md"
   },
   {
@@ -44,7 +44,7 @@
     "sprite": "cat_calico",
     "tunic": "#1e6f5c",
     "seat": 3,
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.6-flash",
     "file": "ai_company/instructions/dev_instruction.md"
   },
   {
@@ -56,7 +56,7 @@
     "sprite": "cat_white",
     "tunic": "#289672",
     "seat": 4,
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.6-flash",
     "file": "ai_company/instructions/dev_instruction.md"
   },
   {
@@ -68,7 +68,7 @@
     "sprite": "cat_tabby",
     "tunic": "#e07a5f",
     "seat": 5,
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.6-flash",
     "file": "ai_company/instructions/dev_instruction.md"
   },
   {
@@ -80,7 +80,7 @@
     "sprite": "cat_grey",
     "tunic": "#3d5a80",
     "seat": 6,
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.6-flash",
     "file": "ai_company/instructions/dev_instruction.md"
   },
   {
@@ -92,7 +92,7 @@
     "sprite": "cat_orange",
     "tunic": "#c35a38",
     "seat": 7,
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.6-flash",
     "file": "ai_company/instructions/marketing_instruction.md"
   },
   {
@@ -104,7 +104,7 @@
     "sprite": "cat_calico",
     "tunic": "#d97736",
     "seat": 8,
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.6-flash",
     "file": "ai_company/instructions/marketing_instruction.md"
   },
   {
@@ -116,7 +116,7 @@
     "sprite": "cat_tabby",
     "tunic": "#e28743",
     "seat": 9,
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.6-flash",
     "file": "ai_company/instructions/marketing_instruction.md"
   },
   {
@@ -128,7 +128,7 @@
     "sprite": "cat_white",
     "tunic": "#ba5a31",
     "seat": 10,
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.6-flash",
     "file": "ai_company/instructions/marketing_instruction.md"
   },
   {
@@ -140,7 +140,7 @@
     "sprite": "cat_black",
     "tunic": "#9a4a28",
     "seat": 11,
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.6-flash",
     "file": "ai_company/instructions/marketing_instruction.md"
   },
   {
@@ -152,7 +152,7 @@
     "sprite": "cat_orange",
     "tunic": "#5e3c88",
     "seat": 12,
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.6-flash",
     "file": "ai_company/instructions/media_instruction.md"
   },
   {
@@ -164,7 +164,7 @@
     "sprite": "cat_grey",
     "tunic": "#754f9e",
     "seat": 13,
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.6-flash",
     "file": "ai_company/instructions/media_instruction.md"
   },
   {
@@ -176,7 +176,7 @@
     "sprite": "cat_calico",
     "tunic": "#885fa8",
     "seat": 14,
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.6-flash",
     "file": "ai_company/instructions/media_instruction.md"
   },
   {
@@ -188,7 +188,7 @@
     "sprite": "cat_white",
     "tunic": "#6a4591",
     "seat": 15,
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.6-flash",
     "file": "ai_company/instructions/media_instruction.md"
   },
   {
@@ -200,7 +200,7 @@
     "sprite": "cat_tabby",
     "tunic": "#4d326f",
     "seat": 16,
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.6-flash",
     "file": "ai_company/instructions/media_instruction.md"
   }
 ]
