@@ -180,6 +180,13 @@ def handle_app_mentions(body, say):
         say(text=summary, thread_ts=thread_ts)
         return
 
+    if any(k in clean_text for k in ["업데이트", "update", "최신화", "pull"]):
+        say(text="🔄 *[서버 자동 업데이트 시작]* GitHub 최신 코드를 당겨오고 백그라운드 프로세스를 재부팅합니다...", thread_ts=thread_ts)
+        from scripts.self_update import run_self_update
+        threading.Thread(target=run_self_update, daemon=True).start()
+        return
+
+
     # 기본 시작 에이전트 판단
     target_agent = "CEO"
     for name in AGENTS.keys():
@@ -377,6 +384,22 @@ def handle_threads_command(ack, respond, command):
         respond(f"❌ Threads 게시 실패: {res.get('error')}")
 
 
+@app.command("/update")
+@app.command("/ai-update")
+def handle_update_command(ack, respond, command):
+    """GCP 서버에서 git pull origin main 실행 후 백그라운드 자동 재시작"""
+    ack()
+    respond("🔄 *[서버 자동 업데이트 시작]* GitHub에서 최신 코드를 내려받고 프로세스를 안전하게 재부팅합니다...")
+    
+    def _do_update():
+        from scripts.self_update import run_self_update
+        success, msg = run_self_update()
+        if not success:
+            respond(f"❌ 업데이트 실패: {msg}")
+
+    threading.Thread(target=_do_update, daemon=True).start()
+
+
 @app.command("/help")
 @app.command("/agent-help")
 @app.command("/ai-help")
@@ -384,14 +407,16 @@ def handle_help_command(ack, respond, command):
     ack()
     msg = """
 🤖 *1인 AI 비즈니스 OS 슬랙 명령어 안내*
-• `/status` 또는 `/ai-status` : 전체 에이전트 상태, GSD 마일스톤, 콘텐츠 버퍼 현황 확인
-• `/schedule` 또는 `/ai-schedule` : 동적 발행 시간대 및 버퍼 수량 조회 및 실시간 변경
-• `/instant` 또는 `/ai-instant` : 팩트 2차 재검증된 예비 스레드 1초 즉시 인출 및 승인 요청
-• `/browse <URL>` 또는 `/ai-browse <URL>` : Playwright 브라우저로 웹페이지 내용 실시간 스크래핑
-• `/threads <내용>` 또는 `/ai-threads <내용>` : Threads에 글 즉시 발행 또는 스테이징
+• `/ai-status` : 전체 에이전트 상태, GSD 마일스톤, 콘텐츠 버퍼 현황 확인
+• `/ai-update` : 깃허브 최신 코드를 서버로 자동 pull 및 원클릭 무중단 재부팅 🚀
+• `/ai-schedule` : 동적 발행 시간대 및 버퍼 수량 조회 및 실시간 변경
+• `/ai-instant` : 팩트 2차 재검증된 예비 스레드 1초 즉시 인출 및 승인 요청
+• `/ai-browse <URL>` : Playwright 브라우저로 웹페이지 내용 실시간 스크래핑
+• `/ai-threads <내용>` : Threads에 글 즉시 발행 또는 스테이징
 • `@CEO` / `@개발팀장` / `@마케팅팀장` : 채널에서 에이전트 멘션 시 instruction.md 태그 협업 파이프라인 가동
 """
     respond(msg)
+
 
 
 
