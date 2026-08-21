@@ -93,6 +93,64 @@ def post_as_agent(channel: str, agent_name: str, text: str, thread_ts: str = Non
                 logger.error(f"Auto-join failed for {channel}: {e2}")
         logger.error(f"Failed to post message as {agent_name}: {e}")
 
+def get_server_host() -> str:
+    """공인 IP 또는 환경변수 SERVER_HOST 자동 감지"""
+    host = os.getenv("SERVER_HOST", "").strip()
+    if host:
+        return host
+    try:
+        import urllib.request
+        with urllib.request.urlopen("https://api.ipify.org", timeout=1.5) as resp:
+            return resp.read().decode("utf-8").strip()
+    except Exception:
+        return "localhost"
+
+def get_message_permalink(channel: str, message_ts: str) -> str:
+    """슬랙 메시지/스레드 원본 바로가기 링크 생성"""
+    if not channel or not message_ts or not is_slack_configured:
+        return ""
+    try:
+        res = app.client.chat_getPermalink(channel=channel, message_ts=message_ts)
+        return res.get("permalink", "")
+    except Exception:
+        return ""
+
+def get_project_summary_info(project_dir: Path) -> dict:
+    """생성된 프로젝트 파일 및 산출물 스캔"""
+    files = []
+    has_html = False
+    html_rel_path = ""
+    
+    # 1. projects/ 폴더 스캔
+    projects_dir = PROJECT_ROOT / "projects"
+    if projects_dir.exists():
+        for root, dirs, fnames in os.walk(projects_dir):
+            dirs[:] = [d for d in dirs if d not in {".git", "node_modules", "__pycache__"}]
+            for fn in fnames:
+                rel = os.path.relpath(os.path.join(root, fn), PROJECT_ROOT)
+                files.append(rel)
+                if fn == "index.html" and not has_html:
+                    has_html = True
+                    html_rel_path = rel
+
+    # 2. output/ 폴더 스캔
+    if project_dir and project_dir.exists():
+        for root, dirs, fnames in os.walk(project_dir):
+            for fn in fnames:
+                rel = os.path.relpath(os.path.join(root, fn), PROJECT_ROOT)
+                if rel not in files:
+                    files.append(rel)
+                if fn == "index.html" and not has_html:
+                    has_html = True
+                    html_rel_path = rel
+
+    return {
+        "files": files,
+        "total_files": len(files),
+        "has_html": has_html,
+        "html_rel_path": html_rel_path
+    }
+
 def get_target_channel(agent_name: str, fallback_channel: str) -> str:
     """에이전트의 소속 부서에 맞는 전용 채널 반환"""
     config = AGENTS.get(agent_name)
@@ -269,29 +327,113 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
 
     relay_path = " → ".join(visited_agents)
     summary_text = user_prompt[:50] + ("..." if len(user_prompt) > 50 else "")
+    host = get_server_host()
+    info = get_project_summary_info(project_output_dir)
+    preview_url = f"http://{host}:8080/{info['html_rel_path']}" if info['has_html'] else f"http://{host}:8080/ai_company/web/"
+    file_list_str = "\n".join([f"• `{f}`" for f in info["files"][:5]]) if info["files"] else "• 산출물 생성 완료"
 
     # 1. #hq-board: CEO 최종 완료 보고 (원본 스레드에)
     if len(visited_agents) > 2:
         post_as_agent(
             channel, "CEO",
             f"✅ *[프로젝트 완료]* `{summary_text}`\n"
-            f"릴레이: {relay_path}\n"
-            f"📁 산출물: `{project_output_dir}`",
+            f"• 릴레이: `{relay_path}`\n"
+            f"• 산출물: `{project_output_dir}`\n"
+            f"• 라이브 뷰어: {preview_url}",
             thread_ts
         )
 
-    # 2. #ceo-briefing: CEO 일일 보고
+    # 2. #ceo-briefing: CEO 일일 다이렉트 상세 보고 카드 (Block Kit)
     ceo_chan = CHANNEL_MAP.get("ceo_report")
-    if ceo_chan:
-        post_as_agent(ceo_chan, "CEO",
-            f"📋 *[프로젝트 브리핑]* {summary_text} 완료 ({len(visited_agents)} agents)")
+    if ceo_chan and len(visited_agents) > 2:
+        permalink = get_message_permalink(channel, thread_ts)
+        ceo_blocks = [
+            {
+                "type": "header",
+                "text": {"type": "plain_text", "text": "📋 [CEO 프로젝트 완료 브리핑]", "emoji": True}
+            },
+            {
+                "type": "section",
+                "fields": [
+                    {"type": "mrkdwn", "text": f"*프로젝트:*\n{summary_text}"},
+                    {"type": "mrkdwn", "text": f"*투입 에이전트 ({len(visited_agents)}명):*\n`{relay_path}`"},
+                    {"type": "mrkdwn", "text": f"*활성 페이즈:*\n`Phase 1: Core Automation`"},
+                    {"type": "mrkdwn", "text": f"*생성 파일 ({info['total_files']}개):*\n{file_list_str}"}
+                ]
+            },
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "💬 원본 토론 스레드 바로가기", "emoji": True},
+                        "url": permalink or f"https://slack.com",
+                        "style": "primary"
+                    },
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "🌐 라이브 산출물 뷰어 열기", "emoji": True},
+                        "url": preview_url
+                    }
+                ]
+            }
+        ]
+        post_as_agent(ceo_chan, "CEO", f"📋 *[프로젝트 브리핑]* {summary_text}", blocks=ceo_blocks)
 
-    # 3. #output-review: 검수 요청
+    # 3. #output-review: 개발팀장 4대 검수 체크리스트 & 라이브 미리보기 카드
     review_chan = CHANNEL_MAP.get("output_review")
     if review_chan and len(visited_agents) > 2:
-        post_as_agent(review_chan, "개발팀장",
-            f"🔍 *[검수 요청]* `{summary_text}` 산출물 리뷰 요청\n"
-            f"📁 경로: `{project_output_dir}`")
+        review_blocks = [
+            {
+                "type": "header",
+                "text": {"type": "plain_text", "text": "🔍 [개발팀장] 프로젝트 최종 검수 요청", "emoji": True}
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*{summary_text}*\n개발 실무 릴레이(`사원A~E`)가 완료되어 최종 사용자 검수를 요청합니다."
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        "📋 *[4대 필수 검수 체크리스트]*\n"
+                        "1️⃣ *요구 기능 구현*: 사용자 요청 기능 및 갤러리/UI 컴포넌트 완료\n"
+                        "2️⃣ *DESIGN.md 준수*: 큐레이션 폰트, 단일 주조색, AI 클리셰 5대 금지 통과\n"
+                        "3️⃣ *QA & 보안 검증*: 사원D 모의 침투 및 파일 유효성 검증 완료\n"
+                        "4️⃣ *주요 생성 파일*:\n" + file_list_str
+                    )
+                }
+            },
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "🚀 웹페이지 라이브 미리보기 (Live Preview)", "emoji": True},
+                        "url": preview_url,
+                        "style": "primary"
+                    },
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "✅ 최종 승인 (Approve)", "emoji": True},
+                        "value": f"approved_{project_folder_name}",
+                        "action_id": "approve_dev_output"
+                    },
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "🔄 수정 요청 (Reject)", "emoji": True},
+                        "style": "danger",
+                        "value": f"reject_{project_folder_name}",
+                        "action_id": "reject_dev_output"
+                    }
+                ]
+            }
+        ]
+        post_as_agent(review_chan, "개발팀장", f"🔍 *[검수 요청]* {summary_text}", blocks=review_blocks)
 
 
 @app.event("app_mention")
@@ -584,17 +726,35 @@ def handle_reject_threads(ack, body, respond):
     respond(f"❌ @{user} 님에 의해 해당 콘텐츠 발행이 반려(취소)되었습니다.")
 
 
+@app.action("approve_dev_output")
+def handle_approve_dev(ack, body, respond):
+    ack()
+    user = body.get("user", {}).get("username", "User")
+    action_val = body.get("actions", [{}])[0].get("value", "")
+    logger.info(f"User {user} approved dev output: {action_val}")
+    respond(f"✅ @{user} 님에 의해 해당 프로젝트 산출물이 *최종 승인(Approve)* 되었습니다! 🎉 배포 및 운영 단계로 전환합니다.")
+
+
+@app.action("reject_dev_output")
+def handle_reject_dev(ack, body, respond):
+    ack()
+    user = body.get("user", {}).get("username", "User")
+    action_val = body.get("actions", [{}])[0].get("value", "")
+    logger.info(f"User {user} requested revision for: {action_val}")
+    respond(f"🔄 @{user} 님에 의해 *수정 요청(반려)* 되었습니다. 개발팀장이 피드백을 반영하여 재작업 및 보완을 진행합니다.")
+
+
 def start_local_dashboard_server(port: int = 8080):
-    """초경량 로컬 웹 대시보드 서버"""
+    """초경량 로컬 웹 대시보드 및 산출물 서빙 서버 (projects/ 및 output/ 라이브 렌더링)"""
     import functools
-    serve_dir = str(PROJECT_ROOT / "ai_company")
+    serve_dir = str(PROJECT_ROOT)
     handler = functools.partial(SimpleHTTPRequestHandler, directory=serve_dir)
     try:
         httpd = HTTPServer(("0.0.0.0", port), handler)
-        logger.info(f"Local Dashboard running at http://localhost:{port}/web/")
+        logger.info(f"Live Project & Dashboard Server running at http://0.0.0.0:{port}/")
         httpd.serve_forever()
     except Exception as e:
-        logger.warning(f"Could not start local web dashboard: {e}")
+        logger.warning(f"Could not start local web server: {e}")
 
 
 def dynamic_scheduler_loop():
