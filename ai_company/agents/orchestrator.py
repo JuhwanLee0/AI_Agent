@@ -131,22 +131,22 @@ class ClaudeMemManager:
         return ""
 
     def get_memory_context(self, department: str, agent_name: str) -> str:
-        """에이전트에게 주입할 장기 기억 컨텍스트 추출"""
+        """에이전트에게 주입할 장기 기억 컨텍스트 추출 (초경량 압축)"""
         memories = []
         
-        # 1. Global & Department memory
+        # 1. Global & Department memory (최근 2개만 유지하여 토큰 절감)
         if "global" in self.local_memories:
-            for item in self.local_memories["global"][-5:]:
-                memories.append(f"- [전사 기억]: {item.get('text', '')}")
+            for item in self.local_memories["global"][-2:]:
+                memories.append(f"- [전사]: {item.get('text', '')}")
         
         if department in self.local_memories:
-            for item in self.local_memories[department][-5:]:
-                memories.append(f"- [{department} 부서 기억]: {item.get('text', '')}")
+            for item in self.local_memories[department][-2:]:
+                memories.append(f"- [{department}]: {item.get('text', '')}")
 
         if not memories:
-            memories.append("- 현재 축적된 이전 세션 특이사항 없음.")
+            memories.append("- 축적된 이전 세션 특이사항 없음.")
 
-        return "<claude-mem-context>\n# Memory Context from Past Sessions\n" + "\n".join(memories) + "\n</claude-mem-context>"
+        return "<claude-mem-context>\n" + "\n".join(memories) + "\n</claude-mem-context>"
 
     def synthesize_decision_with_groq(self, agent_name: str, full_text: str) -> str:
         """Groq API(llama-3.3-70b / gpt-oss-20b)를 활용하여 긴 활동에서 1~2줄 핵심 결정/학습 기억 자동 추출"""
@@ -605,108 +605,124 @@ class CompanyOrchestrator:
         self.graphify = GraphifyEngine()
         self.ponytail = PonytailAuditor()
 
+    def extract_role_instruction(self, instruction_path: str, agent_name: str, department: str) -> str:
+        """직무 지침서에서 해당 에이전트의 전용 역할 섹션만 스마트 추출 (토큰 다이어트)"""
+        if not os.path.exists(instruction_path):
+            return ""
+        try:
+            with open(instruction_path, "r", encoding="utf-8") as f:
+                full_text = f.read()
+            
+            if department == "executive" or agent_name == "CEO":
+                return full_text[:1000].strip()
+
+            # 해당 에이전트(@이름)의 헤더부터 다음 헤더 또는 인수인계 섹션 전까지 정확히 분리 추출
+            pattern = rf"(###\s*\d*\.?\s*@{re.escape(agent_name)}[\s\S]*?)(?=###\s*\d*\.?\s*@|##\s*인수인계|\Z)"
+            match = re.search(pattern, full_text)
+            if match:
+                return match.group(1).strip()[:1000]
+            
+            return full_text[:800].strip()
+        except Exception as e:
+            logger.debug(f"Role instruction extraction fallback: {e}")
+            return ""
+
     def load_system_prompt(self, agent_name: str) -> str:
         config = AGENTS.get(agent_name)
         if not config:
             raise ValueError(f"Unknown agent: {agent_name}")
 
-        # [1. 전사 공통 지침: instruction.md]
-        common_handoff = ""
-        common_path = os.path.join(INSTRUCTIONS_DIR, "instruction.md")
-        if os.path.exists(common_path):
-            with open(common_path, "r", encoding="utf-8") as f:
-                common_handoff = f.read()[:2000]
+        # [1. 전사 공통 핵심 지침 (경량화)]
+        common_handoff = (
+            "- **인수인계 4대 양식**: @다음담당자 태그 + 작업 요약 + 경영진 주의사항 + 구체적 액션 아이템\n"
+            "- **산출물 격리**: `projects/<프로젝트명>/` 또는 `output/<프로젝트명>/` 에 저장\n"
+            "- **절대 금기**: 서버 내부 절대 경로(`/home/...`) 단독 표기 금지, 미배포 로컬 미리보기 링크(`http://localhost:8080/projects/<slug>/index.html`) 및 파일 목록 필수 제공\n"
+            "- **도구 실행**: 실제 파일 생성 시 `[TOOL:write_file path=\"...\" content=\"...\"]` 반드시 사용"
+        )
 
-        # [2. 부서 및 직무 지침서]
-        agent_instruction = ""
+        # [2. 해당 에이전트 전용 직무 지침 추출]
         inst_path = os.path.join(INSTRUCTIONS_DIR, config.instruction_file)
-        if os.path.exists(inst_path):
-            with open(inst_path, "r", encoding="utf-8") as f:
-                agent_instruction = f.read()[:2500]
+        agent_instruction = self.extract_role_instruction(inst_path, agent_name, config.department)
 
-        # [3. Claude-Mem 장기 기억 컨텍스트]
+        # [3. 장기 기억 컨텍스트]
         mem_context = self.claude_mem.get_memory_context(config.department, agent_name)
 
-        # [4. GSD 활성 상태 및 디스패치 컨텍스트]
+        # [4. GSD 활성 상태 & Ponytail 규율]
         gsd_context = self.gsd.get_gsd_context(agent_name)
-
-        # [5. Graphify 아키텍처 및 지식 그래프 컨텍스트]
-        graph_context = self.graphify.get_graph_context(config.department, agent_name)
-
-        # [6. Ponytail 실용주의(YAGNI) 가이드라인]
         ponytail_context = self.ponytail.get_ponytail_context(config.department)
 
-        # [7. 부서별 특화 스킬 로드]
+        # [5. 에이전트 맞춤형 핵심 스킬 로드]
         skills_text = self._load_skills(config.department, agent_name)
 
         raw_prompt = f"""
-[절대 최우선 행동 지침 - 5-LAYER INTELLIGENCE COMPLIANCE]
-당신은 모든 판단과 작업 수행 시 아래 instruction 및 5대 지능 엔진(Headroom-AI, Claude-Mem, GSD, Graphify, Ponytail)의 원칙을 최우선 기준으로 준수합니다.
+[5-LAYER INTELLIGENCE COMPLIANCE]
+당신은 모든 작업 시 5대 지능 엔진(Headroom, Claude-Mem, GSD, Graphify, Ponytail) 원칙을 준수합니다.
 
-==================================================
-[1. 전사 공통 지침: instruction.md]
+[1. 전사 공통 규칙]
 {common_handoff}
-==================================================
 
-==================================================
-[2. 부서 및 직무 지침: {config.instruction_file}]
+[2. 당신의 직무 지침: {config.name} ({config.role})]
 {agent_instruction}
-==================================================
 
-==================================================
-[3. 장기 기억 컨텍스트 (Claude-Mem)]
+[3. 장기 기억 & GSD 상태]
 {mem_context}
-==================================================
-
-==================================================
-[4. GSD 실행 상태 및 Ponytail 규율]
 {gsd_context}
 {ponytail_context}
-==================================================
 
 {skills_text}
 
-[당신의 역할]
-이름: {config.name} | 직책: {config.role} | 부서: {config.department}
-
 [출력 형식]
-답변 시 항상 instruction.md에 명시된 인수인계 양식(@다음담당자 태그, 작업 요약, 핵심 주의사항, 액션 아이템)을 명확하게 작성하십시오.
+답변 시 항상 `@다음담당자` 태그와 함께 작업 요약, 산출물 경로, 후속 액션 아이템을 명확하게 작성하십시오.
 """
         optimized_prompt = self.headroom.optimize_text(raw_prompt)
         return optimized_prompt.strip()
 
     AGENT_SKILL_MAPPING: Dict[str, List[str]] = {
         # 경영진 & 비즈니스
-        "CEO": ["executive_governance.md", "kpi_dashboard.md"],
-        # 개발본부 특화 스킬 매핑
-        "개발팀장": ["team_lead_skills.md", "vibe_coding_security_checklist.md", "ui_ux_design_system.md", "design_system.md"],
-        "개발_사원A": ["architect_skills.md", "vibe_coding_security_checklist.md"],
+        "CEO": ["executive_governance.md"],
+        # 개발본부 (각 에이전트별 필수 스킬만 1~2개로 압축 매핑)
+        "개발팀장": ["team_lead_skills.md"],
+        "개발_사원A": ["architect_skills.md"],
         "개발_사원B": ["backend_skills.md", "vibe_coding_security_checklist.md"],
-        "개발_사원C": ["frontend_skills.md", "ui_ux_design_system.md", "ui_styling.md", "banner_design.md", "design_system.md"],
-        "개발_사원D": ["qa_security_skills.md", "vibe_coding_security_checklist.md", "ui_ux_design_system.md"],
-        "개발_사원E": ["devops_infra_skills.md", "vibe_coding_security_checklist.md"],
-        # 마케팅본부 특화 스킬 매핑
-        "마케팅팀장": ["marketing_psychology.md", "sns_viral_formula.md", "copywriting_mastery.md"],
-        "마케팅_사원A": ["marketing_psychology.md", "sns_viral_formula.md"],
-        "마케팅_사원B": ["copywriting_mastery.md", "sns_viral_formula.md"],
-        "마케팅_사원C": ["copywriting_mastery.md", "marketing_psychology.md"],
-        "마케팅_사원D": ["sns_viral_formula.md", "banner_design.md"],
+        "개발_사원C": ["frontend_skills.md", "ui_ux_design_system.md"],
+        "개발_사원D": ["qa_security_skills.md", "vibe_coding_security_checklist.md"],
+        "개발_사원E": ["devops_infra_skills.md"],
+        # 마케팅본부
+        "마케팅팀장": ["marketing_psychology.md"],
+        "마케팅_사원A": ["sns_viral_formula.md"],
+        "마케팅_사원B": ["copywriting_mastery.md"],
+        "마케팅_사원C": ["copywriting_mastery.md"],
+        "마케팅_사원D": ["banner_design.md"],
+        # 미디어본부
+        "미디어팀장": ["story_craft.md"],
+        "미디어_사원A": ["story_narrative_rules.md"],
+        "미디어_사원B": ["story_craft.md"],
+        "미디어_사원C": ["story_craft.md"],
+        "미디어_사원D": ["story_narrative_rules.md"],
     }
 
     def _load_skills(self, department: str, agent_name: str) -> str:
         skills = []
         dept_dir = os.path.join(SKILLS_DIR, department)
-        if os.path.exists(dept_dir):
-            target_files = self.AGENT_SKILL_MAPPING.get(agent_name, [])
-            for fname in target_files:
-                fpath = os.path.join(dept_dir, fname)
-                if os.path.exists(fpath):
+        global_dir = os.path.join(SKILLS_DIR, "global")
+        
+        target_files = self.AGENT_SKILL_MAPPING.get(agent_name, [])
+        for fname in target_files:
+            fpath = os.path.join(dept_dir, fname)
+            if not os.path.exists(fpath):
+                fpath = os.path.join(global_dir, fname)
+            if os.path.exists(fpath):
+                try:
                     with open(fpath, "r", encoding="utf-8") as f:
-                        skills.append(f"### [Role Skill ({agent_name}): {fname}]\n" + f.read()[:1500])
+                        content = f.read()
+                        clean_content = re.sub(r'<!--.*?-->', '', content, flags=re.DOTALL)
+                        skills.append(f"### [{fname}]\n{clean_content[:700].strip()}")
+                except Exception as e:
+                    logger.debug(f"Skill load error ({fname}): {e}")
 
         if not skills:
             return ""
-        return "## [적용 가능한 스킬 목록]\n" + "\n\n".join(skills)
+        return "## [핵심 실행 스킬]\n" + "\n\n".join(skills)
 
     def parse_next_agent(self, response_text: str, current_agent: str = "") -> Optional[str]:
         """발화자(current_agent) 제외, 한국어 호환 @태그 탐지"""
@@ -805,7 +821,7 @@ class CompanyOrchestrator:
                             model=cand["model"],
                             messages=messages,
                             temperature=0.7,
-                            max_tokens=4000,
+                            max_tokens=1200,
                         )
                         if completion.choices and completion.choices[0].message.content:
                             return completion.choices[0].message.content
