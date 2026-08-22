@@ -36,7 +36,7 @@ def normalize_model_name(model_str: str, default: str = "gemini-2.5-flash") -> s
 
 MODEL_CEO = os.getenv("MODEL_CEO", "cerebras/gpt-oss-120b").strip()
 MODEL_MANAGER = os.getenv("MODEL_MANAGER", "cerebras/gpt-oss-120b").strip()
-MODEL_WORKER = os.getenv("MODEL_WORKER", "cerebras/gemma-4-31b").strip()
+MODEL_WORKER = os.getenv("MODEL_WORKER", "groq/openai/gpt-oss-20b").strip()
 
 # Fallback keys
 GEMINI_API_KEY_1 = os.getenv("GEMINI_API_KEY_1", "").strip()

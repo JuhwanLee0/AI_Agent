@@ -26,7 +26,7 @@ class TavilyScout:
                 "provider": "Cerebras",
                 "base_url": "https://api.cerebras.ai/v1",
                 "api_key": cerebras_key,
-                "model": "gemma-4-31b"
+                "model": "qwen/qwen3.6-27b"
             })
         if groq_key:
             self.candidates.append({

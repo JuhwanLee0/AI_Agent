@@ -594,7 +594,7 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
                 f"✅ *[업무 완료 보고]* {summary_text}\n"
                 f"• 👥 릴레이: `{relay_path}`\n"
                 f"• 📁 산출물 디렉토리: `{target_project_dir_rel}`\n"
-                f"• 📋 산출물 목록:\n{file_list_str if info['files'] else '• 담당 에이전트 실무 처리 완료'}"
+                f"• 📋 산출물 목록:\n{file_list_str if info['files'] else '• (산출물 파일 없음 — 기획/설계 단계 완료)'}"
             )
         post_as_agent(channel, "CEO", ceo_thread_msg, thread_ts=thread_ts)
 
@@ -614,7 +614,7 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
                 f"📋 *[CEO 업무 브리핑]* {summary_text}\n"
                 f"• 👥 투입 에이전트: `{relay_path}`\n"
                 f"• 📁 산출물 경로: `{target_project_dir_rel}`\n"
-                f"• 📋 산출물 목록:\n{file_list_str if info['files'] else '• 담당 에이전트 실무 처리 완료'}"
+                f"• 📋 산출물 목록:\n{file_list_str if info['files'] else '• (산출물 파일 없음 — 기획/설계 단계 완료)'}"
             )
         post_as_agent(ceo_chan, "CEO", ceo_brief_msg)
 

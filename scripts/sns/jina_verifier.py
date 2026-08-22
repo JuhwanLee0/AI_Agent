@@ -27,7 +27,7 @@ class JinaVerifier:
                 "provider": "Cerebras",
                 "base_url": "https://api.cerebras.ai/v1",
                 "api_key": cerebras_key,
-                "model": "gpt-oss-120bProduction"
+                "model": "qwen/qwen3.6-27b"
             })
         if groq_key:
             self.candidates.append({

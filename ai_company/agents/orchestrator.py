@@ -419,7 +419,7 @@ class AgentConfig:
         instruction_file: str,
         api_key_env: str,
         model_env: str = "MODEL_MANAGER",
-        default_model: str = "cerebras/gpt-oss-120bProduction",
+        default_model: str = "groq/qwen/qwen3.6-27b",
         avatar_name: str = "robot"
     ):
         self.name = name
@@ -720,35 +720,54 @@ class CompanyOrchestrator:
         return None
 
     def get_client_candidates(self, agent_name: str) -> List[Dict[str, Any]]:
-        """에이전트 설정에 따라 Cerebras 및 Groq 듀얼 클라우드 후보 목록 추출 (어느 한쪽 키만 있어도 100% 자동 가동)"""
+        """에이전트 설정에 따라 Groq 클라우드 후보 목록 추출 (검증된 가용 모델만 사용)"""
         config = AGENTS.get(agent_name)
         if not config:
             return []
             
         provider, model_id = config.get_provider_and_model()
-        cerebras_key = (os.getenv("CEREBRAS_API_KEY_1") or os.getenv("CEREBRAS_API_KEY_2") or os.getenv("CEREBRAS_API_KEY_3") or os.getenv("CEREBRAS_API_KEY", "")).strip()
         groq_key = (os.getenv("GROQ_API_KEY_1") or os.getenv("GROQ_API_KEY_2") or os.getenv("GROQ_API_KEY_3") or os.getenv("GROQ_API_KEY", "")).strip()
+        cerebras_key = (os.getenv("CEREBRAS_API_KEY_1") or os.getenv("CEREBRAS_API_KEY_2") or os.getenv("CEREBRAS_API_KEY_3") or os.getenv("CEREBRAS_API_KEY", "")).strip()
+        
+        # 가용 모델 화이트리스트 (이 목록에 없는 모델은 절대 호출하지 않음)
+        ALLOWED_MODELS = {
+            "groq/compound", "meta-llama/llama-prompt-guard-2-86m",
+            "openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b",
+        }
+        
+        # .env에서 읽은 model_id에서 provider 접두사 제거 (groq/qwen/... → qwen/...)
+        clean_model = model_id
+        if clean_model.startswith("groq/"):
+            clean_model = clean_model[5:]
+        if clean_model.startswith("cerebras/"):
+            clean_model = clean_model[9:]
+        
+        # 화이트리스트에 없으면 역할에 따라 안전한 기본 모델 사용
+        if clean_model not in ALLOWED_MODELS:
+            if config.model_env in ["MODEL_CEO", "MODEL_MANAGER"]:
+                clean_model = "qwen/qwen3.6-27b"
+            else:
+                clean_model = "openai/gpt-oss-20b"
         
         candidates = []
         
-        # 1. Cerebras API 키가 있는 경우
-        if cerebras_key:
-            c_model = model_id if provider == "cerebras" else ("gpt-oss-120bProduction" if config.model_env == "MODEL_CEO" else "gemma-4-31bPreview")
-            candidates.append({
-                "provider": "Cerebras",
-                "base_url": "https://api.cerebras.ai/v1",
-                "api_key": cerebras_key,
-                "model": c_model
-            })
-            
-        # 2. Groq API 키가 있는 경우 (Cerebras 실패 시 또는 Groq 단독 구동 시)
+        # 1순위: Groq (검증된 주력)
         if groq_key:
-            g_model = model_id if provider == "groq" else ("llama-3.3-70b-versatile" if config.model_env in ["MODEL_CEO", "MODEL_MANAGER"] else "llama-3.1-8b-instant")
             candidates.append({
                 "provider": "Groq",
                 "base_url": "https://api.groq.com/openai/v1",
                 "api_key": groq_key,
-                "model": g_model
+                "model": clean_model
+            })
+        
+        # 2순위: Groq 서브 모델 (1순위 실패 시 자동 전환)
+        if groq_key:
+            sub_model = "openai/gpt-oss-20b" if clean_model != "openai/gpt-oss-20b" else "qwen/qwen3.6-27b"
+            candidates.append({
+                "provider": "Groq",
+                "base_url": "https://api.groq.com/openai/v1",
+                "api_key": groq_key,
+                "model": sub_model
             })
             
         return candidates
@@ -839,7 +858,7 @@ class CompanyOrchestrator:
             return output_text
         except Exception as e:
             logger.error(f"LLM Call Error for {agent_name}: {e}")
-            return f"[시스템 에러: {agent_name} 에이전트 LLM 호출 실패 - {str(e)}]"
+            raise RuntimeError(f"{agent_name} 에이전트 LLM 호출 실패 - {e}") from e
 
     def execute_tool(self, tool_name: str, **kwargs) -> Dict[str, Any]:
         """
