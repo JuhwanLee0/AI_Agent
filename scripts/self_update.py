@@ -42,12 +42,13 @@ def run_self_update():
     except Exception:
         latest_commit = "최신 커밋 정보 확인 불가"
 
+    py_exec = sys.executable or "python3"
     restart_script = f"""
-sleep 1
-pkill -f "ai_company.main" || true
-pkill -f "main.py" || true
+sleep 2
+pkill -9 -f "ai_company.main" || true
+pkill -9 -f "main.py" || true
 cd "{PROJECT_ROOT}"
-nohup python3 -u main.py > agent.log 2>&1 &
+nohup {py_exec} -u main.py > agent.log 2>&1 &
 """
     subprocess.Popen(["bash", "-c", restart_script], start_new_session=True)
     
