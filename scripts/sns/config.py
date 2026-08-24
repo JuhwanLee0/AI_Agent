@@ -25,59 +25,65 @@ CEREBRAS_API_KEY = (os.getenv("CEREBRAS_API_KEY_1") or os.getenv("CEREBRAS_API_K
 GROQ_API_KEY = (os.getenv("GROQ_API_KEY_1") or os.getenv("GROQ_API_KEY", "")).strip()
 
 # ==============================================================================
-# 2. 직급별 모델 설정 (120B / Gemma / Qwen)
+# 2. 직급별 모델 설정 (Groq 27B / 120B / 20B 듀얼 클라우드)
 # ==============================================================================
-def normalize_model_name(model_str: str, default: str = "gemini-2.5-flash") -> str:
+def normalize_model_name(model_str: str, default: str = "openai/gpt-oss-20b") -> str:
     if not model_str:
         return default
-    if "/" in model_str:
-        return model_str.split("/")[-1]
+    if model_str.startswith("groq/"):
+        return model_str.replace("groq/", "")
+    if model_str.startswith("cerebras/"):
+        return model_str.replace("cerebras/", "")
     return model_str
 
-MODEL_CEO = os.getenv("MODEL_CEO", "cerebras/gpt-oss-120b").strip()
-MODEL_MANAGER = os.getenv("MODEL_MANAGER", "cerebras/gpt-oss-120b").strip()
+MODEL_CEO = os.getenv("MODEL_CEO", "groq/openai/gpt-oss-120b").strip()
+MODEL_MANAGER = os.getenv("MODEL_MANAGER", "groq/openai/gpt-oss-120b").strip()
 MODEL_WORKER = os.getenv("MODEL_WORKER", "groq/openai/gpt-oss-20b").strip()
 
-# Fallback keys
+# Fallback & Legacy Keys for backward compatibility
 GEMINI_API_KEY_1 = os.getenv("GEMINI_API_KEY_1", "").strip()
 GEMINI_API_KEY_2 = os.getenv("GEMINI_API_KEY_2", "").strip()
 GEMINI_API_KEY_3 = os.getenv("GEMINI_API_KEY_3", "").strip()
 DEFAULT_GEMINI_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 
-def get_gemini_model(role: str = "worker") -> str:
-    """역할에 맞는 공식 Gemini 모델 버전 반환"""
+def get_role_model(role: str = "worker") -> str:
+    """역할에 맞는 공식 AI 모델 버전 반환"""
     role = role.lower()
     if role in ("ceo", "executive"):
-        return normalize_model_name(MODEL_CEO, "gemini-2.5-flash")
+        return normalize_model_name(MODEL_CEO, "openai/gpt-oss-120b")
     elif role in ("manager", "lead", "팀장", "verifier", "dev", "개발사원", "개발_사원", "developer"):
-        return normalize_model_name(MODEL_MANAGER, "gemini-2.5-flash")
+        return normalize_model_name(MODEL_MANAGER, "openai/gpt-oss-120b")
     else:  # worker, 사원, scout, 마케팅, sns
-        return normalize_model_name(MODEL_WORKER, "gemini-2.5-flash")
+        return normalize_model_name(MODEL_WORKER, "openai/gpt-oss-20b")
 
-GEMINI_MODEL = get_gemini_model("worker")
+def get_gemini_model(role: str = "worker") -> str:
+    """하위 호환용 모델 반환 함수"""
+    return get_role_model(role)
+
+AI_MODEL = get_role_model("worker")
+GEMINI_MODEL = AI_MODEL
 
 
 # ==============================================================================
 # 3. ⏱️ Rate Limit (RPM / RPD) 속도 제어기 (429 방지 안전 딜레이)
 # ==============================================================================
-# 3.6/3.7:    RPM 5  -> 요청 간 최소 12.5초 간격
-# 3.5-lite:   RPM 30 -> 요청 간 최소 2.5초 간격
-# 3.5-flash:  RPM 15 -> 요청 간 최소 4.5초 간격
+# Groq 30 RPM -> 요청 간 최소 2.0초 간격
+# 복잡한 모델(27B/120B) -> 요청 간 최소 3.0초 간격
 def get_safe_delay(role: str = "worker") -> float:
-    model_name = get_gemini_model(role)
-    if "lite" in model_name:
-        return 2.5   # 30 RPM 초고속 안전 딜레이
-    elif "2.5" in model_name or "3.6" in model_name or "3.7" in model_name:
-        return 12.5  # 5 RPM 안전 딜레이
+    model_name = get_role_model(role)
+    if "20b" in model_name or "mini" in model_name or "lite" in model_name:
+        return 1.5   # 30 RPM 초고속 안전 딜레이
+    elif "120b" in model_name or "27b" in model_name or "3.6" in model_name:
+        return 3.0   # 고성능 모델 안전 딜레이
     else:
-        return 4.5   # 15 RPM 안전 딜레이
+        return 2.0
 
 # ==============================================================================
 # 4. 🛡️ KeyPoolManager (스마트 폴백 및 CEO 20% 쿼터 보호 방어선)
 # ==============================================================================
 class KeyPoolManager:
     """
-    3.6 모델(RPD 20) 및 3.5-lite 모델(RPD 1500)의 한도를 고려하여
+    Groq/Cerebras 및 다중 키 한도를 고려하여
     실무사원이 한도 초과 시 CEO 키를 최대 80%까지만 스마트 차용하고
     CEO 고유 업무를 위한 20%는 무조건 보존하는 매니저
     """
@@ -85,21 +91,32 @@ class KeyPoolManager:
         self.borrowed_from_ceo_count = 0
         self.enable_ceo_fallback = os.getenv("ENABLE_CEO_KEY_FALLBACK", "true").lower() in ("true", "1", "yes")
         self.ceo_max_borrow_percent = int(os.getenv("CEO_KEY_MAX_BORROW_PERCENT", "80"))
-        # RPD 20 기준: 20 * 0.8 = 16회 대여, 4회(20%)는 CEO 전용 보존
-        self.daily_ceo_limit = int(os.getenv("DAILY_CEO_KEY_LIMIT", "20"))
+        self.daily_ceo_limit = int(os.getenv("DAILY_GROQ_LIMIT", os.getenv("DAILY_CEO_KEY_LIMIT", "100")))
         self.max_borrow_calls = max(1, int(self.daily_ceo_limit * (self.ceo_max_borrow_percent / 100.0)))
 
     def get_initial_key(self, role: str = "worker") -> Tuple[str, str]:
         role = role.lower()
         if role in ("ceo", "executive"):
-            key = os.environ.get("GEMINI_API_KEY_1", GEMINI_API_KEY_1) or os.environ.get("GEMINI_API_KEY_CEO", "").strip() or os.environ.get("GEMINI_API_KEY", DEFAULT_GEMINI_KEY)
-            return key, "Key 1 (CEO)"
+            key = (
+                os.environ.get("GROQ_API_KEY_1") or os.environ.get("CEREBRAS_API_KEY_1") or
+                os.environ.get("GEMINI_API_KEY_1", GEMINI_API_KEY_1) or
+                os.environ.get("GROQ_API_KEY", GROQ_API_KEY) or os.environ.get("GEMINI_API_KEY", DEFAULT_GEMINI_KEY)
+            )
+            return (key or "").strip(), "Key 1 (CEO)"
         elif role in ("manager", "lead", "팀장", "verifier", "dev", "개발사원", "개발_사원", "developer"):
-            key = os.environ.get("GEMINI_API_KEY_2", GEMINI_API_KEY_2) or os.environ.get("GEMINI_API_KEY_DEV", "").strip() or os.environ.get("GEMINI_API_KEY_MARKETING", "").strip() or os.environ.get("GEMINI_API_KEY", DEFAULT_GEMINI_KEY)
-            return key, "Key 2 (팀장/개발)"
+            key = (
+                os.environ.get("GROQ_API_KEY_2") or os.environ.get("CEREBRAS_API_KEY_2") or
+                os.environ.get("GEMINI_API_KEY_2", GEMINI_API_KEY_2) or
+                os.environ.get("GROQ_API_KEY", GROQ_API_KEY) or os.environ.get("GEMINI_API_KEY", DEFAULT_GEMINI_KEY)
+            )
+            return (key or "").strip(), "Key 2 (팀장/개발)"
         else:
-            key = os.environ.get("GEMINI_API_KEY_3", GEMINI_API_KEY_3) or os.environ.get("GEMINI_API_KEY_MEDIA", "").strip() or os.environ.get("GEMINI_API_KEY", DEFAULT_GEMINI_KEY)
-            return key, "Key 3 (실무사원)"
+            key = (
+                os.environ.get("GROQ_API_KEY_3") or os.environ.get("CEREBRAS_API_KEY_3") or
+                os.environ.get("GEMINI_API_KEY_3", GEMINI_API_KEY_3) or
+                os.environ.get("GROQ_API_KEY", GROQ_API_KEY) or os.environ.get("GEMINI_API_KEY", DEFAULT_GEMINI_KEY)
+            )
+            return (key or "").strip(), "Key 3 (실무사원)"
 
     def get_fallback_key(self, role: str = "worker") -> Tuple[Optional[str], str]:
         """Key 3 한도 도달 시 CEO Key 1 스마트 차용 (20% 예비분 보존 검사)"""
@@ -108,20 +125,30 @@ class KeyPoolManager:
             return None, "폴백 비활성화"
 
         # 1. 1차 폴백: 팀장/개발 키(Key 2) 여유 시도
-        team_key = (os.environ.get("GEMINI_API_KEY_2", GEMINI_API_KEY_2) or os.environ.get("GEMINI_API_KEY_DEV", "")).strip()
-        worker_key = (os.environ.get("GEMINI_API_KEY_3", GEMINI_API_KEY_3) or os.environ.get("GEMINI_API_KEY_MEDIA", "")).strip()
+        team_key = (
+            os.environ.get("GROQ_API_KEY_2") or os.environ.get("CEREBRAS_API_KEY_2") or
+            os.environ.get("GEMINI_API_KEY_2", GEMINI_API_KEY_2)
+        )
+        worker_key = (
+            os.environ.get("GROQ_API_KEY_3") or os.environ.get("CEREBRAS_API_KEY_3") or
+            os.environ.get("GEMINI_API_KEY_3", GEMINI_API_KEY_3)
+        )
         if team_key and team_key != worker_key:
             logger.info("[Quota Shield] Key 3 한도 초과 -> Key 2(팀장/개발)로 1차 폴백 전환")
-            return team_key, "Key 2 (팀장/개발 1차 폴백)"
+            return team_key.strip(), "Key 2 (팀장/개발 1차 폴백)"
 
         # 2. 2차 폴백: CEO 키(Key 1) 스마트 차용
-        ceo_key = (os.environ.get("GEMINI_API_KEY_1", GEMINI_API_KEY_1) or os.environ.get("GEMINI_API_KEY_CEO", "") or os.environ.get("GEMINI_API_KEY", DEFAULT_GEMINI_KEY)).strip()
+        ceo_key = (
+            os.environ.get("GROQ_API_KEY_1") or os.environ.get("CEREBRAS_API_KEY_1") or
+            os.environ.get("GEMINI_API_KEY_1", GEMINI_API_KEY_1) or
+            os.environ.get("GROQ_API_KEY", GROQ_API_KEY) or os.environ.get("GEMINI_API_KEY", DEFAULT_GEMINI_KEY)
+        )
         if not ceo_key:
             return None, "사용 가능한 CEO 키 없음"
 
+        ceo_key = ceo_key.strip()
         if self.borrowed_from_ceo_count < self.max_borrow_calls:
             self.borrowed_from_ceo_count += 1
-            remaining_borrow = self.max_borrow_calls - self.borrowed_from_ceo_count
             logger.warning(
                 f"[Quota Shield] 🚨 Key 3 한도 초과! CEO Key(Key 1) 스마트 차용 승인 "
                 f"(차용 누적: {self.borrowed_from_ceo_count}/{self.max_borrow_calls}회, CEO 20% 안전 비축분 보존 중)"
@@ -138,19 +165,21 @@ class KeyPoolManager:
         key, _ = self.get_initial_key(role)
         if not key:
             key, _ = self.get_fallback_key(role)
-        model_name = get_gemini_model(role)
+        model_name = get_role_model(role)
         return key, model_name
 
 # 글로벌 인스턴스
 key_pool = KeyPoolManager()
 
-def get_gemini_key(role: str = "worker") -> str:
+def get_role_key(role: str = "worker") -> str:
     key, _ = key_pool.get_initial_key(role)
-    return key
+    return key or ""
 
+def get_gemini_key(role: str = "worker") -> str:
+    return get_role_key(role)
 
 # 하위 호환용 기본 키
-GEMINI_API_KEY = get_gemini_key("worker")
+GEMINI_API_KEY = get_role_key("worker")
 
 # Tavily & Jina
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "").strip()

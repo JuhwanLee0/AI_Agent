@@ -56,6 +56,23 @@ CHANNEL_MAP = {
     "marketing": os.getenv("SLACK_CHANNEL_MARKETING"),        # 5. 마케팅/미디어팀장 + 실무사원
 }
 
+def sanitize_slack_text(text: str) -> str:
+    """
+    Qwen 및 LLM <think> 태그 슬랙 누출 원천 차단
+    - 닫힌 태그 및 미완성 태그 모두 정제하여 순수 답변만 보존
+    """
+    if not text:
+        return ""
+    cleaned = re.sub(r"<think>[\s\S]*?</think>", "", text).strip()
+    if "<think>" in cleaned:
+        match = re.search(r"(?:\n\n|\n)(?:Draft|최종|@|##|###|\*\*|\[TOOL:)([\s\S]*)", cleaned)
+        if match:
+            cleaned = match.group(0).strip()
+        else:
+            cleaned = re.sub(r"^<think>[\s\S]*?(?=\n\n[^\n]+$)", "", cleaned).strip()
+            cleaned = cleaned.replace("<think>", "").replace("</think>", "").strip()
+    return cleaned or text.strip()
+
 def post_as_agent(channel: str, agent_name: str, text: str, thread_ts: str = None, blocks: list = None):
     """
     특정 에이전트의 페르소나(이름 및 아이콘)로 슬랙에 메시지 전송
@@ -67,6 +84,7 @@ def post_as_agent(channel: str, agent_name: str, text: str, thread_ts: str = Non
         logger.debug(f"Slack not configured, logging output for {agent_name}: {text[:60]}...")
         return
 
+    clean_text = sanitize_slack_text(text)
     config = AGENTS.get(agent_name)
     username = f"{agent_name} ({config.role})" if config else agent_name
     icon_emoji = f":{config.avatar_name}:" if config else ":robot_face:"
@@ -74,7 +92,7 @@ def post_as_agent(channel: str, agent_name: str, text: str, thread_ts: str = Non
     try:
         kwargs = {
             "channel": channel,
-            "text": text,
+            "text": clean_text,
             "username": username,
             "icon_emoji": icon_emoji,
         }
@@ -149,10 +167,11 @@ def extract_compact_summary(agent_name: str, full_text: str) -> str:
     에이전트의 긴 전체 텍스트에서 3~6줄 핵심 요약본을 스마트 추출
     (도구 실행 내역, 생성 파일, 핵심 의사결정, 인수인계 태그 정돈)
     """
-    if not full_text or not full_text.strip():
+    clean_text = sanitize_slack_text(full_text)
+    if not clean_text or not clean_text.strip():
         return "작업 완료"
 
-    lines = [line.strip() for line in full_text.split("\n") if line.strip()]
+    lines = [line.strip() for line in clean_text.split("\n") if line.strip()]
     
     tools_used = []
     summary_lines = []
@@ -223,16 +242,17 @@ def post_as_agent_with_summary(channel: str, agent_name: str, full_text: str, th
             logger.debug(f"Slack not configured, logging output for {agent_name}: {full_text[:60]}...")
         return
 
+    clean_full_text = sanitize_slack_text(full_text)
     config = AGENTS.get(agent_name)
     role = config.role if config else "전문가"
     
     # 150자 이하의 짧은 텍스트는 그대로 전송
-    if len(full_text.strip()) <= 150 and "[TOOL:" not in full_text:
-        post_as_agent(channel, agent_name, full_text.strip(), thread_ts=thread_ts)
+    if len(clean_full_text.strip()) <= 150 and "[TOOL:" not in clean_full_text:
+        post_as_agent(channel, agent_name, clean_full_text.strip(), thread_ts=thread_ts)
         return
     
     # 2~3줄 가독성 높은 콤팩트 요약문 추출
-    summary = extract_compact_summary(agent_name, full_text)
+    summary = extract_compact_summary(agent_name, clean_full_text)
     msg_text = f"👤 *[{agent_name}]* ({role})\n{summary}"
     
     post_as_agent(channel, agent_name, msg_text, thread_ts=thread_ts)
@@ -523,8 +543,13 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
             task="인수인계 완료"
         )
 
-        # 대화 히스토리 누적
-        history.append({"role": "assistant", "content": f"[{current_agent}]: {response}"})
+        # 대화 히스토리 슬라이딩 윈도우 & 콤팩트 누적 (Groq TPM 413 한도 초과 원천 차단)
+        compact_step = extract_compact_summary(current_agent, response)
+        history.append({"role": "assistant", "content": f"[{current_agent}]: {compact_step}"})
+        
+        # 1GB 메모리 및 토큰 안전 다이어트: 초기 사용자 요청(0번) + 최근 3개 에이전트 핵심 인수인계만 유지
+        if len(history) > 4:
+            history = [history[0]] + history[-3:]
 
         # 다음 에이전트 태그 탐지 (@다음에이전트) — current_agent 자기 자신 제외
         next_agent = orchestrator.parse_next_agent(response, current_agent)

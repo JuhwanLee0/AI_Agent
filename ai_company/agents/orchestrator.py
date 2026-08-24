@@ -49,11 +49,21 @@ class HeadroomOptimizer:
 
     def optimize_messages(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """대화 메시지 리스트에 대해 토큰 압축 및 최적화 수행"""
-        if not self.enabled or not self._headroom or not messages:
-            return messages
         try:
-            res = self._headroom.compress(messages)
-            if hasattr(res, 'messages') and isinstance(res.messages, list):
+            # 1. 과거 대화 메시지 중 지나치게 긴 텍스트 자동 트리밍 (Groq 8000/30000 TPM 보호)
+            pre_trimmed = []
+            for i, m in enumerate(messages):
+                role = str(m.get("role", "user")) if isinstance(m, dict) else str(getattr(m, "role", "user"))
+                content = str(m.get("content", "")) if isinstance(m, dict) else str(getattr(m, "content", ""))
+                # 직전 메시지가 아닌 이전 히스토리가 1800자를 초과하는 경우 압축
+                if i < len(messages) - 1 and len(content) > 1800:
+                    content = content[:1200] + "\n...(핵심 인수인계 외 중략)...\n" + content[-400:]
+                pre_trimmed.append({"role": role, "content": content})
+
+            if not self.enabled or not self._headroom or not pre_trimmed:
+                return pre_trimmed
+            res = self._headroom.compress(pre_trimmed)
+            if hasattr(res, 'messages') and isinstance(res.messages, list) and len(res.messages) > 0:
                 clean_res = []
                 for m in res.messages:
                     if isinstance(m, dict) and "role" in m and "content" in m:
@@ -65,7 +75,7 @@ class HeadroomOptimizer:
                     if saved > 0:
                         logger.info(f"[Headroom-AI] Optimized context: saved {saved} tokens.")
                     return clean_res
-            return messages
+            return pre_trimmed
         except Exception as e:
             logger.debug(f"[Headroom-AI] Message optimization pass-through: {e}")
             return messages
@@ -417,10 +427,10 @@ class AgentConfig:
         role: str,
         department: str,
         instruction_file: str,
-        api_key_env: str,
+        api_key_env: str = "GROQ_API_KEY",
         model_env: str = "MODEL_MANAGER",
-        default_model: str = "groq/qwen/qwen3.6-27b",
-        avatar_name: str = "robot"
+        default_model: str = "groq/openai/gpt-oss-120b",
+        avatar_name: str = "robot_face"
     ):
         self.name = name
         self.role = role
@@ -472,26 +482,26 @@ class AgentConfig:
 
 
 AGENTS: Dict[str, AgentConfig] = {
-    # 경영진 (CEO - Qwen 27B)
-    "CEO": AgentConfig("CEO", "최고경영자", "executive", "ceo_instruction.md", "GROQ_API_KEY_1", "MODEL_CEO", "groq/qwen/qwen3.6-27b", "briefcase"),
+    # 경영진 (CEO - High IQ 120B / Qwen 27B)
+    "CEO": AgentConfig("CEO", "최고경영자", "executive", "ceo_instruction.md", "GROQ_API_KEY_1", "MODEL_CEO", "groq/openai/gpt-oss-120b", "briefcase"),
     
-    # 개발본부 (Qwen 27B 풀스택 코딩)
-    "개발팀장": AgentConfig("개발팀장", "Technical Lead & Scrum Master", "dev", "dev_instruction.md", "GROQ_API_KEY_2", "MODEL_MANAGER", "groq/qwen/qwen3.6-27b", "hammer_and_wrench"),
-    "개발_사원A": AgentConfig("개발_사원A", "System Architect", "dev", "dev_instruction.md", "GROQ_API_KEY_2", "MODEL_MANAGER", "groq/qwen/qwen3.6-27b", "building_construction"),
-    "개발_사원B": AgentConfig("개발_사원B", "Backend & Data Engineer / Security", "dev", "dev_instruction.md", "GROQ_API_KEY_2", "MODEL_MANAGER", "groq/qwen/qwen3.6-27b", "shield"),
-    "개발_사원C": AgentConfig("개발_사원C", "Frontend & UI / Payment UX", "dev", "dev_instruction.md", "GROQ_API_KEY_2", "MODEL_MANAGER", "groq/qwen/qwen3.6-27b", "credit_card"),
-    "개발_사원D": AgentConfig("개발_사원D", "QA & Penetration Engineer", "dev", "dev_instruction.md", "GROQ_API_KEY_2", "MODEL_MANAGER", "groq/qwen/qwen3.6-27b", "mag"),
-    "개발_사원E": AgentConfig("개발_사원E", "DevOps & Infra Engineer", "dev", "dev_instruction.md", "GROQ_API_KEY_2", "MODEL_MANAGER", "groq/qwen/qwen3.6-27b", "cloud"),
+    # 개발본부 (120B / 20B 고TPM 분산 아키텍처)
+    "개발팀장": AgentConfig("개발팀장", "Technical Lead & Scrum Master", "dev", "dev_instruction.md", "GROQ_API_KEY_2", "MODEL_MANAGER", "groq/openai/gpt-oss-120b", "hammer_and_wrench"),
+    "개발_사원A": AgentConfig("개발_사원A", "System Architect", "dev", "dev_instruction.md", "GROQ_API_KEY_2", "MODEL_MANAGER", "groq/openai/gpt-oss-120b", "building_construction"),
+    "개발_사원B": AgentConfig("개발_사원B", "Backend & Data Engineer / Security", "dev", "dev_instruction.md", "GROQ_API_KEY_2", "MODEL_WORKER", "groq/openai/gpt-oss-20b", "shield"),
+    "개발_사원C": AgentConfig("개발_사원C", "Frontend & UI / Payment UX", "dev", "dev_instruction.md", "GROQ_API_KEY_2", "MODEL_MANAGER", "groq/openai/gpt-oss-120b", "credit_card"),
+    "개발_사원D": AgentConfig("개발_사원D", "QA & Penetration Engineer", "dev", "dev_instruction.md", "GROQ_API_KEY_2", "MODEL_WORKER", "groq/openai/gpt-oss-20b", "mag"),
+    "개발_사원E": AgentConfig("개발_사원E", "DevOps & Infra Engineer", "dev", "dev_instruction.md", "GROQ_API_KEY_2", "MODEL_WORKER", "groq/openai/gpt-oss-20b", "cloud"),
 
-    # 마케팅본부 (20B 초고속 카피라이팅)
-    "마케팅팀장": AgentConfig("마케팅팀장", "Marketing Director", "marketing", "marketing_instruction.md", "GROQ_API_KEY_3", "MODEL_MANAGER", "groq/qwen/qwen3.6-27b", "chart_with_upwards_trend"),
+    # 마케팅본부 (120B / 20B 초고속 카피라이팅)
+    "마케팅팀장": AgentConfig("마케팅팀장", "Marketing Director", "marketing", "marketing_instruction.md", "GROQ_API_KEY_3", "MODEL_MANAGER", "groq/openai/gpt-oss-120b", "chart_with_upwards_trend"),
     "마케팅_사원A": AgentConfig("마케팅_사원A", "Trend & Material Analyst", "marketing", "marketing_instruction.md", "GROQ_API_KEY_3", "MODEL_WORKER", "groq/openai/gpt-oss-20b", "telescope"),
     "마케팅_사원B": AgentConfig("마케팅_사원B", "Content Architect (3막 8장)", "marketing", "marketing_instruction.md", "GROQ_API_KEY_3", "MODEL_WORKER", "groq/openai/gpt-oss-20b", "scroll"),
     "마케팅_사원C": AgentConfig("마케팅_사원C", "Detail Copywriter & CTA", "marketing", "marketing_instruction.md", "GROQ_API_KEY_3", "MODEL_WORKER", "groq/openai/gpt-oss-20b", "pen"),
     "마케팅_사원D": AgentConfig("마케팅_사원D", "Visual Prompt Engineer", "marketing", "marketing_instruction.md", "GROQ_API_KEY_3", "MODEL_WORKER", "groq/openai/gpt-oss-20b", "art"),
 
     # 미디어본부
-    "미디어팀장": AgentConfig("미디어팀장", "Technical Director", "media", "media_instruction.md", "GROQ_API_KEY_3", "MODEL_MANAGER", "groq/qwen/qwen3.6-27b", "movie_camera"),
+    "미디어팀장": AgentConfig("미디어팀장", "Technical Director", "media", "media_instruction.md", "GROQ_API_KEY_3", "MODEL_MANAGER", "groq/openai/gpt-oss-120b", "movie_camera"),
     "미디어_사원A": AgentConfig("미디어_사원A", "Dual-Engine Audio Specialist", "media", "media_instruction.md", "GROQ_API_KEY_3", "MODEL_WORKER", "groq/openai/gpt-oss-20b", "sound"),
     "미디어_사원B": AgentConfig("미디어_사원B", "Visual & Browser Automation Specialist", "media", "media_instruction.md", "GROQ_API_KEY_3", "MODEL_WORKER", "groq/openai/gpt-oss-20b", "globe_with_meridians"),
     "미디어_사원C": AgentConfig("미디어_사원C", "Compositor & Video Editor", "media", "media_instruction.md", "GROQ_API_KEY_3", "MODEL_WORKER", "groq/openai/gpt-oss-20b", "clapper"),
@@ -655,8 +665,8 @@ class CompanyOrchestrator:
         skills_text = self._load_skills(config.department, agent_name)
 
         raw_prompt = f"""
-[5-LAYER INTELLIGENCE COMPLIANCE]
-당신은 모든 작업 시 5대 지능 엔진(Headroom, Claude-Mem, GSD, Graphify, Ponytail) 원칙을 준수합니다.
+[6-LAYER INTELLIGENCE COMPLIANCE]
+당신은 모든 작업 시 6대 지능 엔진(Headroom, Claude-Mem, GSD, Graphify, Ponytail, unlazy) 원칙을 준수합니다.
 
 [1. 전사 공통 규칙]
 {common_handoff}
@@ -679,26 +689,26 @@ class CompanyOrchestrator:
 
     AGENT_SKILL_MAPPING: Dict[str, List[str]] = {
         # 경영진 & 비즈니스
-        "CEO": ["executive_governance.md"],
-        # 개발본부 (각 에이전트별 필수 스킬만 1~2개로 압축 매핑)
-        "개발팀장": ["team_lead_skills.md"],
-        "개발_사원A": ["architect_skills.md"],
-        "개발_사원B": ["backend_skills.md", "vibe_coding_security_checklist.md"],
-        "개발_사원C": ["frontend_skills.md", "ui_ux_design_system.md"],
-        "개발_사원D": ["qa_security_skills.md", "vibe_coding_security_checklist.md"],
-        "개발_사원E": ["devops_infra_skills.md"],
+        "CEO": ["executive_governance.md", "unlazy_discipline.md"],
+        # 개발본부 (각 에이전트별 필수 스킬과 unlazy 안티-게으름 실행 규율 매핑)
+        "개발팀장": ["team_lead_skills.md", "unlazy_discipline.md"],
+        "개발_사원A": ["architect_skills.md", "unlazy_discipline.md"],
+        "개발_사원B": ["backend_skills.md", "vibe_coding_security_checklist.md", "unlazy_discipline.md"],
+        "개발_사원C": ["frontend_skills.md", "ui_ux_design_system.md", "unlazy_discipline.md"],
+        "개발_사원D": ["qa_security_skills.md", "vibe_coding_security_checklist.md", "unlazy_discipline.md"],
+        "개발_사원E": ["devops_infra_skills.md", "unlazy_discipline.md"],
         # 마케팅본부
-        "마케팅팀장": ["marketing_psychology.md"],
-        "마케팅_사원A": ["sns_viral_formula.md"],
-        "마케팅_사원B": ["copywriting_mastery.md"],
-        "마케팅_사원C": ["copywriting_mastery.md"],
-        "마케팅_사원D": ["banner_design.md"],
+        "마케팅팀장": ["marketing_psychology.md", "unlazy_discipline.md"],
+        "마케팅_사원A": ["sns_viral_formula.md", "unlazy_discipline.md"],
+        "마케팅_사원B": ["copywriting_mastery.md", "unlazy_discipline.md"],
+        "마케팅_사원C": ["copywriting_mastery.md", "unlazy_discipline.md"],
+        "마케팅_사원D": ["banner_design.md", "unlazy_discipline.md"],
         # 미디어본부
-        "미디어팀장": ["story_craft.md"],
-        "미디어_사원A": ["story_narrative_rules.md"],
-        "미디어_사원B": ["story_craft.md"],
-        "미디어_사원C": ["story_craft.md"],
-        "미디어_사원D": ["story_narrative_rules.md"],
+        "미디어팀장": ["story_craft.md", "unlazy_discipline.md"],
+        "미디어_사원A": ["story_narrative_rules.md", "unlazy_discipline.md"],
+        "미디어_사원B": ["story_craft.md", "unlazy_discipline.md"],
+        "미디어_사원C": ["story_craft.md", "unlazy_discipline.md"],
+        "미디어_사원D": ["story_narrative_rules.md", "unlazy_discipline.md"],
     }
 
     def _load_skills(self, department: str, agent_name: str) -> str:
@@ -735,53 +745,113 @@ class CompanyOrchestrator:
                 return agent_name
         return None
 
+    def clean_llm_response(self, text: str) -> str:
+        """
+        Qwen 3.6 등의 <think>...</think> 추론 태그 스마트 정제
+        - 불필요한 내부 생각 과정이 슬랙/결과물로 누출되는 현상 방지
+        - 태그가 닫히지 않은 경우(토큰 한도 등)에도 최종 답변부만 스마트 추출
+        """
+        if not text:
+            return ""
+        
+        if "<think>" in text:
+            if "</think>" in text:
+                cleaned = re.sub(r"<think>[\s\S]*?</think>", "", text).strip()
+            else:
+                # 닫는 태그가 없는 경우: 생각 과정 이후의 실제 답변 패턴 탐지
+                match = re.search(r"(?:\n\n|\n)(?:Draft|최종|@|##|###|\*\*|\[TOOL:)([\s\S]*)", text)
+                if match:
+                    cleaned = match.group(0).strip()
+                else:
+                    # 생각 태그 뒷부분 요약 추출
+                    cleaned = re.sub(r"^<think>[\s\S]*?(?=\n\n[^\n]+$)", "", text).strip()
+                    if not cleaned:
+                        cleaned = text.replace("<think>", "").strip()
+            if cleaned:
+                return cleaned
+
+        return text.strip()
+
     def get_client_candidates(self, agent_name: str) -> List[Dict[str, Any]]:
         """에이전트 설정에 따라 Cerebras 및 Groq 듀얼 클라우드 후보 목록 추출 (어느 한쪽 키만 있어도 100% 자동 가동)"""
         config = AGENTS.get(agent_name)
         if not config:
             return []
             
-        groq_key = (os.getenv("GROQ_API_KEY") or os.getenv("GROQ_API_KEY_1") or os.getenv("GROQ_API_KEY_2") or os.getenv("GROQ_API_KEY_3") or "").strip()
-        cerebras_key = (os.getenv("CEREBRAS_API_KEY") or os.getenv("CEREBRAS_API_KEY_1") or os.getenv("CEREBRAS_API_KEY_2") or os.getenv("CEREBRAS_API_KEY_3") or "").strip()
+        groq_keys = [
+            k.strip() for k in [
+                os.getenv("GROQ_API_KEY_1"),
+                os.getenv("GROQ_API_KEY_2"),
+                os.getenv("GROQ_API_KEY_3"),
+                os.getenv("GROQ_API_KEY")
+            ] if k and k.strip()
+        ]
+        cerebras_keys = [
+            k.strip() for k in [
+                os.getenv("CEREBRAS_API_KEY_1"),
+                os.getenv("CEREBRAS_API_KEY_2"),
+                os.getenv("CEREBRAS_API_KEY_3"),
+                os.getenv("CEREBRAS_API_KEY")
+            ] if k and k.strip()
+        ]
         
         candidates = []
         
-        # 1. Cerebras 클라우드 (초장문 131K 컨텍스트 & 대용량 TPM)
-        if cerebras_key:
-            c_model = "llama3.3-70b" if config.model_env in ["MODEL_CEO", "MODEL_MANAGER"] or config.department == "dev" else "llama3.1-8b"
-            candidates.append({
-                "provider": "Cerebras",
-                "base_url": "https://api.cerebras.ai/v1",
-                "api_key": cerebras_key,
-                "model": c_model
-            })
-            
-        # 2. Groq 클라우드 (초고속 실시간 추론 & 서브 모델 자동 폴백)
-        if groq_key:
-            # 주력 모델 결정
+        # 1. Groq 클라우드 (초고속 실시간 추론 & 고TPM 모델 우선)
+        if groq_keys:
+            primary_groq_key = groq_keys[0]
             clean_model = config.model_name
             if clean_model.startswith("groq/"):
                 clean_model = clean_model[5:]
             if clean_model.startswith("cerebras/"):
                 clean_model = clean_model[9:]
-            if clean_model not in {"qwen/qwen3.6-27b", "openai/gpt-oss-20b", "openai/gpt-oss-120b", "meta-llama/llama-prompt-guard-2-86m"}:
-                clean_model = "qwen/qwen3.6-27b" if config.model_env in ["MODEL_CEO", "MODEL_MANAGER"] else "openai/gpt-oss-20b"
+            # 8,000 TPM 병목인 구형 Qwen 설정이 .env에 남아있더라도 자동으로 30,000+ TPM 고지능 모델로 자동 승격
+            if clean_model == "qwen/qwen3.6-27b" or clean_model not in {"openai/gpt-oss-120b", "openai/gpt-oss-20b", "meta-llama/llama-3.3-70b-versatile", "meta-llama/llama-3.1-8b-instant"}:
+                clean_model = "openai/gpt-oss-120b" if config.model_env in ["MODEL_CEO", "MODEL_MANAGER"] else "openai/gpt-oss-20b"
                 
             candidates.append({
                 "provider": "Groq",
                 "base_url": "https://api.groq.com/openai/v1",
-                "api_key": groq_key,
+                "api_key": primary_groq_key,
                 "model": clean_model
             })
             
-            # 서브 모델 폴백
-            sub_model = "openai/gpt-oss-20b" if clean_model != "openai/gpt-oss-20b" else "qwen/qwen3.6-27b"
-            candidates.append({
-                "provider": "Groq (Sub)",
-                "base_url": "https://api.groq.com/openai/v1",
-                "api_key": groq_key,
-                "model": sub_model
-            })
+            # 고TPM 서브 모델 및 다중 키 분산 폴백
+            for g_key in groq_keys:
+                candidates.append({
+                    "provider": "Groq (120B)",
+                    "base_url": "https://api.groq.com/openai/v1",
+                    "api_key": g_key,
+                    "model": "openai/gpt-oss-120b"
+                })
+                candidates.append({
+                    "provider": "Groq (20B Fast)",
+                    "base_url": "https://api.groq.com/openai/v1",
+                    "api_key": g_key,
+                    "model": "openai/gpt-oss-20b"
+                })
+                candidates.append({
+                    "provider": "Groq (Llama 70B)",
+                    "base_url": "https://api.groq.com/openai/v1",
+                    "api_key": g_key,
+                    "model": "meta-llama/llama-3.3-70b-versatile"
+                })
+
+        # 2. Cerebras 클라우드 (120B / Gemma 31B)
+        if cerebras_keys:
+            for c_key in cerebras_keys:
+                candidates.append({
+                    "provider": "Cerebras",
+                    "base_url": "https://api.cerebras.ai/v1",
+                    "api_key": c_key,
+                    "model": "gpt-oss-120b"
+                })
+                candidates.append({
+                    "provider": "Cerebras (Gemma)",
+                    "base_url": "https://api.cerebras.ai/v1",
+                    "api_key": c_key,
+                    "model": "gemma-4-31b"
+                })
             
         return candidates
 
@@ -806,27 +876,40 @@ class CompanyOrchestrator:
                 from openai import OpenAI
                 last_error = None
                 
+                # 프롬프트 크기 기반 동적 max_tokens 책정 (TPM 8000/30000 초과 방지)
+                total_chars = sum(len(m.get("content", "")) for m in messages)
+                current_max_tokens = 1200 if total_chars < 3000 else 800
+                active_messages = list(messages)
+                
                 for cand in candidates:
                     try:
-                        logger.info(f"Calling {cand['provider']} [{cand['model']}] for {agent_name}...")
+                        logger.info(f"Calling {cand['provider']} [{cand['model']}] for {agent_name} (max_tokens={current_max_tokens})...")
                         client = OpenAI(
                             api_key=cand["api_key"],
                             base_url=cand["base_url"],
-                            timeout=45.0
+                            timeout=35.0
                         )
                         completion = client.chat.completions.create(
                             model=cand["model"],
-                            messages=messages,
+                            messages=active_messages,
                             temperature=0.7,
-                            max_tokens=1200,
+                            max_tokens=current_max_tokens,
                         )
                         if completion.choices and completion.choices[0].message.content:
-                            return completion.choices[0].message.content
+                            raw_resp = completion.choices[0].message.content
+                            return self.clean_llm_response(raw_resp)
                     except Exception as err:
                         err_msg = str(err)
                         last_error = err
-                        logger.warning(f"[{cand['provider']}] call failed for {agent_name}: {err_msg[:80]}... Auto-switching next fallback.")
-                        time.sleep(1.0)
+                        logger.warning(f"[{cand['provider']} - {cand['model']}] failed for {agent_name}: {err_msg[:80]}... Switching next candidate.")
+                        
+                        # 413 (TPM 초과 / Request too large) 발생 시 컨텍스트 즉시 압축 및 max_tokens 하향
+                        if "413" in err_msg or "rate_limit_exceeded" in err_msg or "Request too large" in err_msg:
+                            logger.info(f"[Quota Shield] Auto-compressing messages for {agent_name} due to 413 TPM limit...")
+                            current_max_tokens = 600
+                            # 시스템 프롬프트(0번) + 최근 1개 메시지만 유지하여 극단적 다이어트
+                            if len(active_messages) > 2:
+                                active_messages = [active_messages[0], active_messages[-1]]
                         continue
 
                 raise last_error or Exception("All Cerebras & Groq API candidates exhausted.")
@@ -844,6 +927,7 @@ class CompanyOrchestrator:
                     full_messages.append({"role": str(m.role), "content": str(m.content)})
 
             output_text = _call_llm_with_fallback(full_messages)
+            output_text = self.clean_llm_response(output_text)
 
             # 2. Tool 실행 루프: 도구 결과를 LLM에 재전달 (최대 3회)
             for _tool_iter in range(3):
@@ -852,8 +936,9 @@ class CompanyOrchestrator:
                     break
                 # 도구 결과를 포함하여 LLM 재호출
                 full_messages.append({"role": "assistant", "content": str(output_text)})
-                full_messages.append({"role": "user", "content": f"[도구 실행 결과]\n{tool_output}\n\n위 도구 실행 결과를 바탕으로 답변을 완성해 주세요."})
+                full_messages.append({"role": "user", "content": f"[도구 실행 결과]\n{tool_output}\n\n위 도구 실행 결과를 바탕으로 최종 인수인계 및 답변을 완성해 주세요."})
                 output_text = _call_llm_with_fallback(full_messages)
+                output_text = self.clean_llm_response(output_text)
 
             # 3. Claude-Mem: 중요 결정사항 자동 기록
             if "결과 요약" in output_text or "완료" in output_text or "인수인계" in output_text:
@@ -1070,17 +1155,20 @@ class CompanyOrchestrator:
     def parse_and_run_tools(self, text: str) -> Optional[str]:
         """
         텍스트 내의 `[TOOL:tool_name key=val ...]` 형식 태그 탐지 및 자동 실행
+        - 멀티라인 인자 및 큰따옴표/작은따옴표 안전 파싱
         """
-        tool_matches = re.findall(r"\[TOOL:([a-zA-Z0-9_-]+)\s*(.*?)\]", text)
+        if not text:
+            return None
+        tool_matches = re.findall(r"\[TOOL:([a-zA-Z0-9_-]+)\s*([\s\S]*?)\]", text)
         if not tool_matches:
             return None
 
         results = []
         for tool_name, arg_str in tool_matches:
             try:
-                # key="value" or key='value' or key=value 안전 파싱
+                # key="value" or key='value' or key=value 안전 파싱 (멀티라인 값 지원)
                 clean_args = {}
-                for m in re.finditer(r'(\w+)=(?:"([^"]*)"|\'([^\']*)\'|(\S+))', arg_str):
+                for m in re.finditer(r'(\w+)=(?:"([\s\S]*?)"|\'([\s\S]*?)\'|(\S+))', arg_str):
                     k = m.group(1)
                     v = m.group(2) if m.group(2) is not None else (m.group(3) if m.group(3) is not None else m.group(4))
                     clean_args[k] = v or ""

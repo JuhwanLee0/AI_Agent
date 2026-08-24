@@ -10,7 +10,7 @@
 ### 1인 기업 3대 핵심 파이프라인
 1. **유입 (Acquisition)**: 유튜브, SNS(인스타, 스레드, 링크드인), 숏폼 콘텐츠를 통해 잠재 고객을 지속적으로 유입시킵니다. (`topic-scout`, `banana-pro-director-2.0`, `cinema-worldbuilder-pro-2.0`, `sns-manager`)
 2. **전환 (Conversion)**: 'AI 티'를 완전히 배제한 감각적이고 신뢰도 높은 웹/앱 UI, 강력한 카피라이팅, 명확한 오퍼 및 결제 연동으로 방문자를 실제 유료 고객으로 전환합니다. (`copywriting`, `design-taste-frontend`, `ui-ux-pro-max`, `canvas-design`, `DESIGN.md`)
-3. **제품 및 실행 (Product & Execution)**: 린(Lean)하고 견고한 풀스택 웹/모바일 솔루션을 신속히 개발하고 1GB 저사양 인프라에서도 무결점으로 작동하게 합니다. (`Addy Osmani 24 스킬`, `emil-design-eng`, `TDD/DoD`)
+3. **제품 및 실행 (Product & Execution)**: 린(Lean)하고 견고한 풀스택 웹/모바일 솔루션을 신속히 개발하고 1GB 저사양 인프라에서도 무결점으로 작동하게 합니다. (`unlazy`, `Addy Osmani 24 스킬`, `emil-design-eng`, `TDD/DoD`)
 
 모든 에이전트는 코드 작성이나 콘텐츠 기획 시 항상 **"이것이 실제 고객의 문제를 해결하고 결제/수익화로 이어지는가?"**를 최우선 판단 기준으로 삼습니다.
 
@@ -343,21 +343,28 @@ Banana Pro Director 2.0을 사용해 주세요.
 - ❌ **Before**: *"과일 파는 쇼핑몰 랜딩, 깔끔하고 모던하게 만들어줘"*
 - ✅ **After**: *"과일 파는 쇼핑몰 랜딩. editorial 스타일, 무신사 느낌. 색=ink/paper/오렌지 accent, 제목=Playfair·본문=Pretendard, 좌측 큰 카피+우측 상품컷, 시그니처=가격 옆 손그림 동그라미. 보라 그래디언트·Inter·카드3 금지."*
 
+### 8.4 scrollcraft 프리미엄 스크롤 인터랙션 & 스크롤리텔링 엔진 (Ref: nateherkai/scroll-craft)
+- **스크롤 타임라인 (Scroll as Timeline)**: 스크롤 휠/터치를 비디오/인터랙션 스크러버(Scrubber)로 취급하여 영화 같은 인터랙티브 경험 구축.
+- **8대 페이지 문법**: Filmic one-shot, Chaptered editorial, Live surface, Continuous world (Worldflight), Typographic poster, Gallery/Catalog, Split stage, Rhythmic cutlist 중 1개 선택하여 단조로운 레이아웃 수렴 방지.
+- **6대 차원 지문 게이트 (Fingerprint Gate)**: 문법, 내비게이션, 히어로 디바이스, 액트 시퀀스 형태, 클로즈 패턴, 시그니처 무브 중 최소 4개 이상을 기존 제작 사이트와 다르게 차별화.
+- **감정 곡선 & 1개 엔지니어링 피크**: 액트별 감정 흐름을 설계하고, 단 하나의 가장 강렬한 시각/인터랙션 피크(Peak)와 피크 직전 침묵(Silence) 배치.
+- **헤드리스 브라우저 스크롤 자가 검증**: `scripts/shoot.mjs` 기반으로 전 구간 캡처하여 데드 스크롤(Dead scroll), 텍스트 대비율(Contrast), 디코더 정지 0건 무결점 증명.
+
 ---
 
 ## 9. 개발본부 Addy Osmani 엔지니어링 스킬셋 및 직무 매트릭스
 
-본 프로젝트의 가상 기업 개발본부는 Addy Osmani의 프로덕션 레벨 엔지니어링 스킬셋(24개 스킬, 4대 페르소나, 7대 참조 체크리스트)을 채택하여 결함 없는 소프트웨어를 개발합니다.
+본 프로젝트의 가상 기업 개발본부는 Addy Osmani의 프로덕션 레벨 엔지니어링 스킬셋(24개 스킬, 4대 페르소나, 7대 참조 체크리스트)과 `scrollcraft` 인터랙션 엔진을 채택하여 결함 없는 소프트웨어를 개발합니다.
 
 ### 9.1 직무별 스킬 할당 매트릭스
 
 | 직책 / 사원 | 담당 직무 영역 | Addy Osmani 핵심 스킬 & 체크리스트 |
 | :--- | :--- | :--- |
-| **👑 @개발팀장 & @디자인팀장**<br>(Tech Lead & Art Director) | • 기획안 검토, 비주얼 아트 디렉션 & 디자인 철학 수립<br>• 6블록 PRD 스펙 수립 & WBS 수직 슬라이싱<br>• DoD 검증 및 최종 릴리스/디자인 게이트 승인 | • `canvas-design`<br>• `ui-ux-pro-max`<br>• `design-director`<br>• `spec-driven-development`<br>• `planning-and-task-breakdown`<br>• `interview-me` / `idea-refine`<br>• `doubt-driven-development`<br>• `shipping-and-launch`<br>• `code-review-and-quality`<br>• *Ref: definition-of-done.md, orchestration-patterns.md* |
+| **👑 @개발팀장 & @디자인팀장**<br>(Tech Lead & Art Director) | • 기획안 검토, 비주얼 아트 디렉션 & 디자인 철학 수립<br>• 6블록 PRD 스펙 수립 & WBS 수직 슬라이싱<br>• DoD 검증 및 최종 릴리스/디자인 게이트 승인 | • `unlazy` (안티-게으름 실행 규율, Depth Tree v2 계획, 롤링 디스패치)<br>• `scrollcraft` / `scroll-craft` (스크롤 인터랙션/스크롤리텔링 디렉션, 8대 문법, 지문 게이트, 감정 곡선)<br>• `canvas-design`<br>• `ui-ux-pro-max`<br>• `design-director`<br>• `spec-driven-development`<br>• `planning-and-task-breakdown`<br>• `interview-me` / `idea-refine`<br>• `doubt-driven-development`<br>• `shipping-and-launch`<br>• `code-review-and-quality`<br>• *Ref: definition-of-done.md, orchestration-patterns.md* |
 | **🏛️ @개발_사원A**<br>(System Architect) | • 시스템 아키텍처 & 디렉토리/DB 설계<br>• 계약 우선 API 명세 & 데이터 파이프라인<br>• 기술 결정 문서(ADR) & 단계별 마이그레이션 | • `api-and-interface-design`<br>• `documentation-and-adrs`<br>• `deprecation-and-migration`<br>• `context-engineering`<br>• `spec-driven-development` |
-| **🛡️ @개발_사원B**<br>(Backend & Security) | • 파이썬 비즈니스 로직 & 백엔드 보안 구현<br>• Supabase RLS, 시크릿 키 은닉, TDD 개발<br>• 5단계 디버깅 프로토콜 & 모듈 단순화 | • `incremental-implementation`<br>• `test-driven-development`<br>• `security-and-hardening`<br>• `source-driven-development`<br>• `debugging-and-error-recovery`<br>• `code-simplification`<br>• `git-workflow-and-versioning`<br>• *Ref: security-checklist.md, testing-patterns.md* |
-| **🎨 @개발_사원C & @디자인_사원**<br>(Frontend & UI/UX / Motion) | • Emil Kowalski 마이크로 인터랙션 & 애니메이션 폴리싱<br>• DESIGN.md 수립 & 컴포넌트 SRP 아키텍처<br>• Impeccable Detect 0건 무결점 자가 루프 & 접근성 | • `emil-design-eng`<br>• `ui-ux-pro-max`<br>• `design-taste-frontend`<br>• `frontend-ui-engineering`<br>• `ui-styling`<br>• `banner-design`<br>• `design-system`<br>• `performance-optimization`<br>• `browser-testing-with-devtools`<br>• `source-driven-development`<br>• `code-simplification`<br>• *Ref: accessibility-checklist.md, performance-checklist.md* |
-| **🔍 @개발_사원D**<br>(QA & Security Penetration) | • 5개 축 코드 품질 리뷰 (정확/가독/구조/보안/성능)<br>• 4대 모의 침투(인증/권한/인젝션/결제변조) 테스트<br>• Flawless 반려 프로토콜(파일:라인/재현/수정안) | • `code-review-and-quality`<br>• `security-and-hardening`<br>• `test-driven-development`<br>• `browser-testing-with-devtools`<br>• `doubt-driven-development`<br>• `debugging-and-error-recovery`<br>• *Ref: testing-patterns.md, security-checklist.md* |
+| **🛡️ @개발_사원B**<br>(Backend & Security) | • 파이썬 비즈니스 로직 & 백엔드 보안 구현<br>• Supabase RLS, 시크릿 키 은닉, TDD 개발<br>• 5단계 디버깅 프로토콜 & 모듈 단순화 | • `unlazy` (4-Pass Leaf 완결: 완전 구현 ➔ 전문가 재검토 ➔ 결함 사냥 ➔ 폴리싱)<br>• `incremental-implementation`<br>• `test-driven-development`<br>• `security-and-hardening`<br>• `source-driven-development`<br>• `debugging-and-error-recovery`<br>• `code-simplification`<br>• `git-workflow-and-versioning`<br>• *Ref: security-checklist.md, testing-patterns.md* |
+| **🎨 @개발_사원C & @디자인_사원**<br>(Frontend & UI/UX / Motion) | • Emil Kowalski 마이크로 인터랙션 & 애니메이션 폴리싱<br>• DESIGN.md 수립 & 컴포넌트 SRP 아키텍처<br>• Impeccable Detect 0건 무결점 자가 루프 & 접근성 | • `unlazy` (4-Pass Leaf 완결)<br>• `scrollcraft` / `scroll-craft` (스크롤 타임라인, 비디오 스크러빙, 시그니처 무브, 스크롤 캡처 자가검증)<br>• `emil-design-eng`<br>• `ui-ux-pro-max`<br>• `design-taste-frontend`<br>• `frontend-ui-engineering`<br>• `ui-styling`<br>• `banner-design`<br>• `design-system`<br>• `performance-optimization`<br>• `browser-testing-with-devtools`<br>• `source-driven-development`<br>• `code-simplification`<br>• *Ref: accessibility-checklist.md, performance-checklist.md* |
+| **🔍 @개발_사원D**<br>(QA & Security Penetration) | • 5개 축 코드 품질 리뷰 (정확/가독/구조/보안/성능)<br>• 4대 모의 침투(인증/권한/인젝션/결제변조) 테스트<br>• Flawless 반려 프로토콜(파일:라인/재현/수정안) | • `unlazy` (게이트 검증 `gate-check.mjs`, 실측 레저 감사)<br>• `code-review-and-quality`<br>• `security-and-hardening`<br>• `test-driven-development`<br>• `browser-testing-with-devtools`<br>• `doubt-driven-development`<br>• `debugging-and-error-recovery`<br>• *Ref: testing-patterns.md, security-checklist.md* |
 | **☁️ @개발_사원E**<br>(DevOps & Infra) | • Shift-Left CI/CD 5단계 파이프라인 자동화<br>• 관측 가능성(RED/USE 메트릭 & 구조화 로깅)<br>• GCP 저사양(e2-micro 1GB) 2GB Swap 최적화<br>• 10초 원클릭 롤백 스크립트 상시 유지 | • `ci-cd-and-automation`<br>• `observability-and-instrumentation`<br>• `shipping-and-launch`<br>• `performance-optimization`<br>• `git-workflow-and-versioning`<br>• *Ref: observability-checklist.md* |
 
 ### 9.2 개발본부 핵심 엔지니어링 원칙 5계명
@@ -387,3 +394,43 @@ Banana Pro Director 2.0을 사용해 주세요.
 
 ### 10.3 프로젝트별 부서 질문 방식에 대한 사용자 결정권
 - 새 프로젝트나 작업 시작 시, 위 부서별 기준(마케팅/SNS/디자인)을 에이전트들이 매번 하나씩 다 질문할지, 아니면 기존 설정 파일(`about-me.md`, `voice.md`, `DESIGN.md`)을 그대로 계승할지, 혹은 레퍼런스 기반으로 빠르게 진행할지를 **사용자에게 먼저 물어보고 사용자가 결정한 방식대로 진행**합니다.
+
+---
+
+## 11. ⚡ unlazy (안티-게으름 실행 규율 & Depth Tree v2)
+*(Ref: Leonxlnx/unlazy — Anti-laziness execution discipline for substantial tasks)*
+
+> **"모든 에이전트는 완료했다는 약속 대신, 파일에 기록된 검증 체크(CHECK)와 실측 레저로 완료를 증명합니다."**
+
+### 11.1 핵심 7대 실행 수칙
+1. **0원칙: 작업 전 게이트 파일 작성 (Rule Zero: Gates Before Work)**:
+   - 실제 코딩이나 산출물 생성 전, 반드시 작업 디렉토리에 `GATES.md` 또는 `gates/leaf-x.md`를 먼저 작성합니다.
+   - 실행 가능한 셸 명령(`CHECK:`)과 결정적 기대 문자열(`EXPECT:`)을 명시하여 기계적으로 검증 가능하게 만듭니다.
+   - 체크박스만 체크되어 있고 `EVIDENCE: pending`으로 남아있는 것은 **미완료(UNMET)**로 엄격히 간주합니다.
+2. **Depth Tree v2 & Owns/Needs/Tier 계약**:
+   - 트리 깊이는 작업의 자연스러운 마디(Joint)에 맞춰 분해합니다 (리프는 10분 이상의 온전한 작업 단위).
+   - `Owns:` 리프별 배타적 파일 소유 명시 (동일 파일 공유 금지 ➔ 병렬 롤링 디스패치 보장).
+   - `Needs:` 선행 의존 리프 ID.
+   - `Tier:` `fast` (기계적 반복) vs `smart` (설계/통합/검증/드라이버).
+3. **리프 게이트 vs 브랜치 게이트 분리**:
+   - **리프 게이트 (`gates/leaf-*.md`)**: 해당 리프가 소유한 파일의 단위 테스트, 파일 존재, 로컬 동작만 빠르게 검증.
+   - **브랜치 통합 게이트 (`gates/node-*.md`)**: 전체 프로젝트 빌드, 글로벌 타입체크, E2E 통합 테스트를 브랜치 통합 시점에 단 1회 실행 ($O(L \cdot T)$ 낭비 방지).
+4. **4-Pass Leaf 완결 루프**:
+   - `Pass 1 (완전 구현)`: TODO, 플레이스홀더 0개 유지, 100% 실코드로 구현.
+   - `Pass 2 (전문가 재검토)`: 도메인 최고 전문가 관점에서 저렴한 구현을 고품질로 개선.
+   - `Pass 3 (결함 사냥)`: 엣지 케이스, 경계값, 잠재적 크래시 색출 및 수정.
+   - `Pass 4 (비용 제로 폴리싱)`: 상수 튜닝, 미세 모션 및 가독성 정돈.
+5. **롤링 디스패치 (Rolling Dispatch)**:
+   - 오케스트레이션 모드에서 준비된 리프들을 동시에 병렬 런칭합니다.
+   - 리프 반환 시 전체 트리가 아닌 해당 리프의 게이트 파일만 즉시 타겟 검증(`gate-check.mjs gates/leaf-x.md`).
+   - 완료된 리프가 언락한 후속 리프들을 즉시 실행 풀에 투입합니다.
+6. **보고서 실측 감사 (Report Audit)**:
+   - 기억이나 추측으로 보고서에 통계/수치를 적는 행위를 엄격히 금지합니다.
+   - 모든 보고서 수치는 실측(`CHECK:`) 후 작성하며, **반드시 N/N 게이트 레저를 보고서에 첨부**합니다.
+7. **인라인 탈출 규칙 (Inline Bail-out)**:
+   - 단순 텍스트/문서 수정은 5개의 서브에이전트로 과도하게 분산하지 않고 드라이버가 인라인으로 직접 완결합니다.
+
+### 11.2 검증 명령 및 스크립트 도구
+- **단일 리프 타겟 검증**: `node .agents/skills/unlazy/scripts/gate-check.mjs gates/leaf-1.1.1.md`
+- **병렬 검증 및 상태 리포트**: `node .agents/skills/unlazy/scripts/gate-check.mjs --status --jobs 4`
+- **스톱 훅 설치 (선택)**: `node .agents/skills/unlazy/scripts/install-hooks.mjs`

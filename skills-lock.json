@@ -145,6 +145,18 @@
       "skillPath": "skills/misc/scaffold-exercises/SKILL.md",
       "computedHash": "354c91f6dbc9b058632f30594aacb4edc6d25012596585abb00402af8d7ec5e9"
     },
+    "scroll-craft": {
+      "source": "nateherkai/scroll-craft",
+      "sourceType": "github",
+      "skillPath": "plugins/nateherk-design/skills/scrollcraft/SKILL.md",
+      "computedHash": "7acaec75089f1545c7303ae59402c53ad2d0517a15b6a932d53a63b9ac16c81f"
+    },
+    "scrollcraft": {
+      "source": "nateherkai/scroll-craft",
+      "sourceType": "github",
+      "skillPath": "plugins/nateherk-design/skills/scrollcraft/SKILL.md",
+      "computedHash": "7acaec75089f1545c7303ae59402c53ad2d0517a15b6a932d53a63b9ac16c81f"
+    },
     "setup-matt-pocock-skills": {
       "source": "mattpocock/skills",
       "sourceType": "github",
@@ -216,6 +228,12 @@
       "sourceType": "github",
       "skillPath": ".claude/skills/ui-ux-pro-max/SKILL.md",
       "computedHash": "523b8063c07eedd2b8a1ca94d7a0be9ad340026bd9f21a1eda0b6be2a855298f"
+    },
+    "unlazy": {
+      "source": "Leonxlnx/unlazy",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "5933cdd770f5143336709683d7356f64df2f1600b2de3bd37924673ee4eb122b"
     },
     "wait-what": {
       "source": "mattpocock/skills",

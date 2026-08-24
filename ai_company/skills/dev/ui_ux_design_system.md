@@ -71,3 +71,13 @@ npx --yes impeccable@latest detect <검사할_경로>
 ```
 - 감지된 항목을 `DESIGN.md` 및 4칸 체크리스트에 맞춰 순차 수정.
 - 검사 결과가 **0건(Clean)**이 나올 때까지 수정을 반복하여 무결점을 증명한 뒤 QA로 인계합니다.
+
+---
+
+## 7. scrollcraft 프리미엄 스크롤 인터랙션 & 스크롤리텔링
+*(Ref: nateherkai/scroll-craft)*
+- **스크롤 타임라인 (Scroll as Timeline)**: 마우스 휠/스크롤이 영화 재생의 스크러버(Scrubber)로 동작.
+- **8대 상호 배타적 문법**: Filmic one-shot, Chaptered editorial, Live surface, Continuous world (Worldflight), Typographic poster, Gallery/Catalog, Split stage, Rhythmic cutlist.
+- **6대 차원 지문 게이트 (Fingerprint Gate)**: 문법, 내비게이션, 히어로 디바이스, 액트 시퀀스 형태, 클로즈 패턴, 시그니처 무브 중 최소 4개 이상 차별화.
+- **헤드리스 자가 검증**: 전 구간 스크롤 캡처를 통해 데드 스크롤, 불투명도 미달, 프레임별 텍스트 명도 대비 4.5:1, 디코더 오류 0건 검증.
+

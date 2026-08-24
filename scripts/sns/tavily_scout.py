@@ -12,34 +12,63 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("TavilyScout")
 
 class TavilyScout:
-    def __init__(self, tavily_api_key: Optional[str] = None):
+    def __init__(self, tavily_api_key: Optional[str] = None, gemini_api_key: Optional[str] = None, **kwargs):
         self.tavily_api_key = tavily_api_key or TAVILY_API_KEY
+        self.client = None
         self._init_llm_candidates()
 
     def _init_llm_candidates(self):
-        cerebras_key = (os.getenv("CEREBRAS_API_KEY_3") or os.getenv("CEREBRAS_API_KEY", "")).strip()
-        groq_key = (os.getenv("GROQ_API_KEY_3") or os.getenv("GROQ_API_KEY", "")).strip()
+        groq_keys = [
+            k.strip() for k in [
+                os.getenv("GROQ_API_KEY_3"),
+                os.getenv("GROQ_API_KEY_1"),
+                os.getenv("GROQ_API_KEY_2"),
+                os.getenv("GROQ_API_KEY")
+            ] if k and k.strip()
+        ]
+        cerebras_keys = [
+            k.strip() for k in [
+                os.getenv("CEREBRAS_API_KEY_3"),
+                os.getenv("CEREBRAS_API_KEY_1"),
+                os.getenv("CEREBRAS_API_KEY")
+            ] if k and k.strip()
+        ]
         self.candidates = []
         
-        if cerebras_key:
+        for g_key in groq_keys:
+            self.candidates.append({
+                "provider": "Groq (Worker)",
+                "base_url": "https://api.groq.com/openai/v1",
+                "api_key": g_key,
+                "model": "openai/gpt-oss-20b"
+            })
+            self.candidates.append({
+                "provider": "Groq (120B)",
+                "base_url": "https://api.groq.com/openai/v1",
+                "api_key": g_key,
+                "model": "openai/gpt-oss-120b"
+            })
+
+        for c_key in cerebras_keys:
             self.candidates.append({
                 "provider": "Cerebras",
                 "base_url": "https://api.cerebras.ai/v1",
-                "api_key": cerebras_key,
-                "model": "qwen/qwen3.6-27b"
-            })
-        if groq_key:
-            self.candidates.append({
-                "provider": "Groq",
-                "base_url": "https://api.groq.com/openai/v1",
-                "api_key": groq_key,
-                "model": "openai/gpt-oss-20b"
+                "api_key": c_key,
+                "model": "gpt-oss-120b"
             })
 
     def _generate_with_fallback(self, prompt: str, temperature: float = 0.5) -> str:
         """
         Cerebras & Groq OpenAI 호환 LLM 호출 래퍼
         """
+        if self.client is not None:
+            try:
+                if hasattr(self.client, "models") and hasattr(self.client.models, "generate_content"):
+                    resp = self.client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+                    return resp.text
+            except Exception as mock_err:
+                logger.warning(f"Mock client execution warning: {mock_err}")
+
         if not self.candidates:
             self._init_llm_candidates()
         if not self.candidates:
@@ -60,7 +89,10 @@ class TavilyScout:
                     response_format={"type": "json_object"}
                 )
                 if completion.choices and completion.choices[0].message.content:
-                    return completion.choices[0].message.content
+                    raw_text = completion.choices[0].message.content
+                    if "<think>" in raw_text:
+                        raw_text = re.sub(r"<think>[\s\S]*?</think>", "", raw_text).strip()
+                    return raw_text
             except Exception as e:
                 last_err = e
                 logger.warning(f"[{cand['provider']}] TavilyScout LLM 호출 실패: {e}. 다음 후보로 전환...")
