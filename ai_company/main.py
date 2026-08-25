@@ -198,8 +198,14 @@ def extract_compact_summary(agent_name: str, full_text: str) -> str:
         # 태그 라인
         if "@" in line and any(k in line for k in AGENTS.keys()):
             clean_tag = line.replace("#", "").strip()
-            if clean_tag not in tag_lines:
+            if clean_tag not in tag_lines and not any(f in clean_tag for f in ["홍길동", "구분", "내용"]):
                 tag_lines.append(clean_tag)
+            continue
+
+        # 빈 테이블 및 템플릿 보일러플레이트 완전 제거
+        if line.startswith("|") or "구분" in line or "내용" in line or "|---" in line or "|------" in line:
+            continue
+        if any(h in line for h in ["인수인계 4대 양식", "인수인계 양식", "작업 요약", "경영진/팀장 핵심", "최종 승인 필요 여부"]):
             continue
 
         # 코드/스크립트/스타일 구문 완전 필터링
@@ -217,6 +223,13 @@ def extract_compact_summary(agent_name: str, full_text: str) -> str:
         clean = re.sub(r'\[TOOL:[^\]]+\]', '', clean).strip()
         clean = re.sub(r'^\*\s*', '', clean).strip()
         clean = re.sub(r'^[0-9]+\.\s*', '', clean).strip()
+        clean = re.sub(r'^\*\*[^*]+\*\*', '', clean).strip()
+        
+        # 불필요한 에이전트 헤더 및 가짜 태그 제거
+        if any(clean.startswith(f"[{a}]") for a in AGENTS.keys()) or any(clean.startswith(a) for a in AGENTS.keys()):
+            continue
+        if "@" in clean or "구분" in clean or "내용" in clean or "인수인계" in clean:
+            continue
         
         if clean and len(clean) > 3 and clean not in summary_lines and not clean.endswith("{") and not clean.endswith(";"):
             summary_lines.append(clean)
@@ -532,9 +545,33 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
             progress=int((hop / 8) * 100) if hop <= 8 else 95
         )
 
+        # 각 에이전트별 실질적 직무 미션 주입 (빈 테이블 및 가짜 이름 앵무새 반복 원천 차단)
+        role_missions = {
+            "CEO": f"사용자의 비즈니스 목표('{display_title}')를 정의하고, 기술 구현을 위해 @개발팀장에게 구체적 요구사항을 하달하십시오.",
+            "개발팀장": f"전체 기술 아키텍처 및 디자인 셋업을 총괄하십시오. 브랜드 컨셉에 맞춰 projects/{project_slug}/DESIGN.md를 작성하고, @개발_사원A에게 아키텍처 수립을 지시하십시오.",
+            "개발_사원A": f"'{display_title}'에 대한 시스템 아키텍처 및 컴포넌트 구조를 설계하고, @개발_사원B에게 백엔드/데이터 연동 설계를 지시하십시오.",
+            "개발_사원B": f"데이터 모델, API 명세 및 보안(Security) 체크리스트를 수립하고, @개발_사원C에게 프론트엔드 UI 및 HTML 실구현을 지시하십시오.",
+            "개발_사원C": f"프론트엔드 UI 엔지니어로서 projects/{project_slug}/DESIGN.md 기준을 준수하여 projects/{project_slug}/index.html 및 css/styles.css 코드를 100% 완전하게 작성하고, @개발_사원D에게 QA 검증을 요청하십시오.",
+            "개발_사원D": f"QA 및 보안 엔지니어로서 projects/{project_slug}/index.html과 DESIGN.md의 품질, 웹 접근성, 5대 클리셰 배제 및 보안을 검증하고, @개발_사원E에게 인프라 점검을 인수인계하십시오.",
+            "개발_사원E": f"DevOps 엔지니어로서 1GB 저사양 최적화, 정적 서빙(HTTP 8080) 및 로컬 라이브 뷰어 연결을 검증하고, @개발팀장에게 최종 완료 보고하십시오."
+        }
+        mission = role_missions.get(current_agent, f"당신의 직무에 맞게 작업을 수행하고 다음 담당자에게 인수인계하십시오.")
+        
+        agent_step_prompt = {
+            "role": "user",
+            "content": (
+                f"[{current_agent} 직무 실행 지시]\n"
+                f"• 프로젝트: '{display_title}'\n"
+                f"• 사용자 요청: {clean_text}\n"
+                f"• 당신의 핵심 미션: {mission}\n"
+                f"(⚠️ 빈 테이블(| 구분 | 내용 |), 더미 텍스트, 가짜 이름(@홍길동 등) 절대 금지. 당신의 구체적 작업 내용과 산출물 경로를 작성하십시오)"
+            )
+        }
+        agent_history = history + [agent_step_prompt]
+
         try:
             # LLM 호출 및 도구 실행
-            response = orchestrator.call_agent_llm(current_agent, history)
+            response = orchestrator.call_agent_llm(current_agent, agent_history)
         except Exception as e:
             err_msg = str(e)
             logger.error(f"Pipeline LLM call failed for {current_agent}: {err_msg}")
