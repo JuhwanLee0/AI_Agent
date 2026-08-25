@@ -805,25 +805,21 @@ class CompanyOrchestrator:
         
         # 1. Groq 클라우드 (초고속 실시간 추론 & 고TPM 모델 우선)
         if groq_keys:
-            primary_groq_key = groq_keys[0]
             clean_model = config.model_name
             if clean_model.startswith("groq/"):
                 clean_model = clean_model[5:]
             if clean_model.startswith("cerebras/"):
                 clean_model = clean_model[9:]
-            # 8,000 TPM 병목인 구형 Qwen 설정이 .env에 남아있더라도 자동으로 30,000+ TPM 고지능 모델로 자동 승격
-            if clean_model == "qwen/qwen3.6-27b" or clean_model not in {"openai/gpt-oss-120b", "openai/gpt-oss-20b", "meta-llama/llama-3.3-70b-versatile", "meta-llama/llama-3.1-8b-instant"}:
+            if clean_model not in {"openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b", "groq/compound", "groq/compound-mini"}:
                 clean_model = "openai/gpt-oss-120b" if config.model_env in ["MODEL_CEO", "MODEL_MANAGER"] else "openai/gpt-oss-20b"
                 
-            candidates.append({
-                "provider": "Groq",
-                "base_url": "https://api.groq.com/openai/v1",
-                "api_key": primary_groq_key,
-                "model": clean_model
-            })
-            
-            # 고TPM 서브 모델 및 다중 키 분산 폴백
             for g_key in groq_keys:
+                candidates.append({
+                    "provider": f"Groq ({clean_model})",
+                    "base_url": "https://api.groq.com/openai/v1",
+                    "api_key": g_key,
+                    "model": clean_model
+                })
                 candidates.append({
                     "provider": "Groq (120B)",
                     "base_url": "https://api.groq.com/openai/v1",
@@ -837,10 +833,16 @@ class CompanyOrchestrator:
                     "model": "openai/gpt-oss-20b"
                 })
                 candidates.append({
-                    "provider": "Groq (Llama 70B)",
+                    "provider": "Groq (Qwen 27B)",
                     "base_url": "https://api.groq.com/openai/v1",
                     "api_key": g_key,
-                    "model": "meta-llama/llama-3.3-70b-versatile"
+                    "model": "qwen/qwen3.6-27b"
+                })
+                candidates.append({
+                    "provider": "Groq (Compound Mini)",
+                    "base_url": "https://api.groq.com/openai/v1",
+                    "api_key": g_key,
+                    "model": "groq/compound-mini"
                 })
 
         # 2. Cerebras 클라우드 (120B / Gemma 31B)
@@ -909,11 +911,15 @@ class CompanyOrchestrator:
                         last_error = err
                         logger.warning(f"[{cand['provider']} - {cand['model']}] failed for {agent_name}: {err_msg[:80]}... Switching next candidate.")
                         
+                        # 402 (Payment Required) 또는 401 발생 시 해당 모델 스킵하고 다음 후보로 부드럽게 이행
+                        if "402" in err_msg or "payment_required" in err_msg or "401" in err_msg:
+                            logger.info(f"[{cand['provider']}] Payment required error. Switching to next working provider.")
+                            continue
+
                         # 413 (TPM 초과 / Request too large) 발생 시 컨텍스트 즉시 압축 및 max_tokens 하향
                         if "413" in err_msg or "rate_limit_exceeded" in err_msg or "Request too large" in err_msg:
                             logger.info(f"[Quota Shield] Auto-compressing messages for {agent_name} due to 413 TPM limit...")
                             current_max_tokens = 600
-                            # 시스템 프롬프트(0번) + 최근 1개 메시지만 유지하여 극단적 다이어트
                             if len(active_messages) > 2:
                                 active_messages = [active_messages[0], active_messages[-1]]
                         continue

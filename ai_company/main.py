@@ -225,10 +225,10 @@ def extract_compact_summary(agent_name: str, full_text: str) -> str:
         clean = re.sub(r'^[0-9]+\.\s*', '', clean).strip()
         clean = re.sub(r'^\*\*[^*]+\*\*', '', clean).strip()
         
-        # 불필요한 에이전트 헤더 및 가짜 태그 제거
+        # 불필요한 에이전트 헤더 및 가짜 태그/역할명 제거
         if any(clean.startswith(f"[{a}]") for a in AGENTS.keys()) or any(clean.startswith(a) for a in AGENTS.keys()):
             continue
-        if any(bad in clean for bad in ["@", "구분", "내용", "인수인계", "홍길동", "다음담당자", "프론트엔드팀"]):
+        if any(bad in clean for bad in ["@", "구분", "내용", "인수인계", "홍길동", "다음담당자", "프론트엔드", "디자인팀", "리드"]):
             continue
         
         if clean and len(clean) > 3 and clean not in summary_lines and not clean.endswith("{") and not clean.endswith(";"):
@@ -245,8 +245,11 @@ def extract_compact_summary(agent_name: str, full_text: str) -> str:
         if s not in out_parts:
             out_parts.append(f"• {s}")
 
-    # 3. 인수인계 라인
-    if tag_lines:
+    # 3. 정규 릴레이 체인 기반 결정적 인수인계 (가짜 이름 100% 원천 차단)
+    next_agent = AUTO_RELAY_CHAINS.get(agent_name)
+    if next_agent and next_agent in AGENTS:
+        out_parts.append(f"👉 *인수인계*: @{next_agent} ({AGENTS[next_agent].role})")
+    elif tag_lines:
         out_parts.append(f"👉 *인수인계*: {tag_lines[-1]}")
 
     if not out_parts:
