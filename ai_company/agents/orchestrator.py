@@ -771,9 +771,10 @@ class CompanyOrchestrator:
                 text = cleaned
 
         # 가짜 이름(@홍길동, @프론트엔드팀_홍길동 등) 및 빈 마크다운 테이블 자동 정제
-        text = re.sub(r'@(?:프론트엔드팀_|다음담당자:?\s*@?)?홍길동', '', text)
+        text = re.sub(r'@(?:프론트엔드팀_)?(?:다음담당자:?\s*@?)?홍길동[^\s]*', '', text)
         text = re.sub(r'\|\s*구분\s*\|\s*내용\s*\|', '', text)
         text = re.sub(r'\|\s*-+\s*\|\s*-+\s*\|', '', text)
+        text = re.sub(r'인수인계\s*4대\s*양식', '', text)
 
         return text.strip()
 

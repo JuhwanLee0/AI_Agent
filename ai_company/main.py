@@ -228,7 +228,7 @@ def extract_compact_summary(agent_name: str, full_text: str) -> str:
         # 불필요한 에이전트 헤더 및 가짜 태그 제거
         if any(clean.startswith(f"[{a}]") for a in AGENTS.keys()) or any(clean.startswith(a) for a in AGENTS.keys()):
             continue
-        if "@" in clean or "구분" in clean or "내용" in clean or "인수인계" in clean:
+        if any(bad in clean for bad in ["@", "구분", "내용", "인수인계", "홍길동", "다음담당자", "프론트엔드팀"]):
             continue
         
         if clean and len(clean) > 3 and clean not in summary_lines and not clean.endswith("{") and not clean.endswith(";"):
