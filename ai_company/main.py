@@ -195,12 +195,12 @@ def extract_compact_summary(agent_name: str, full_text: str) -> str:
         for c in c_match:
             tools_used.append(f"⚙️ *[실행 검증]* `{c[:40]}`")
 
-        # 태그 라인
-        if "@" in line and any(k in line for k in AGENTS.keys()):
-            clean_tag = line.replace("#", "").strip()
-            if clean_tag not in tag_lines and not any(f in clean_tag for f in ["홍길동", "구분", "내용"]):
-                tag_lines.append(clean_tag)
-            continue
+        # 정규 에이전트 태그만 정확히 화이트리스트 추출
+        for a_name in AGENTS.keys():
+            if f"@{a_name}" in line and a_name != agent_name:
+                clean_tag = f"@{a_name}"
+                if clean_tag not in tag_lines:
+                    tag_lines.append(clean_tag)
 
         # 빈 테이블 및 템플릿 보일러플레이트 완전 제거
         if line.startswith("|") or "구분" in line or "내용" in line or "|---" in line or "|------" in line:
@@ -564,7 +564,7 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
                 f"• 프로젝트: '{display_title}'\n"
                 f"• 사용자 요청: {clean_text}\n"
                 f"• 당신의 핵심 미션: {mission}\n"
-                f"(⚠️ 빈 테이블(| 구분 | 내용 |), 더미 텍스트, 가짜 이름(@홍길동 등) 절대 금지. 당신의 구체적 작업 내용과 산출물 경로를 작성하십시오)"
+                f"(⚠️ 오직 당신의 직무에 맞는 실질적인 작업 요약과 산출물 경로를 작성하고, 등록된 정규 팀원에게 인수인계하십시오)"
             )
         }
         agent_history = history + [agent_step_prompt]
