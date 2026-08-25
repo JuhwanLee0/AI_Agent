@@ -648,6 +648,11 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
         logger.warning("Pipeline aborted prematurely due to error. Skipping completion reports.")
         return
 
+    # 100% 실물 파일 보장 게이트 (Unlazy Finish Line Gate)
+    if target_project_dir_rel:
+        orchestrator.tracker.state["current_project_dir"] = target_project_dir_rel
+        orchestrator.ensure_project_artifacts(user_prompt)
+
     # 최종 완료 보고 — 미니멀 텍스트 구조
     orchestrator.tracker.state["progress_percent"] = 100
     orchestrator.tracker.state["active_agent"] = "None"

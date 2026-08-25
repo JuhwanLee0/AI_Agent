@@ -682,7 +682,7 @@ class CompanyOrchestrator:
 {skills_text}
 
 [출력 형식]
-답변 시 항상 `@다음담당자` 태그와 함께 작업 요약, 산출물 경로, 후속 액션 아이템을 명확하게 작성하십시오.
+답변 시 다음 담당 정규 에이전트명(@개발팀장, @개발_사원A, @개발_사원B, @개발_사원C, @개발_사원D, @개발_사원E 중 1명)을 명확하게 태그하고, 본인이 완료한 작업 요약과 산출물 파일 경로를 작성하십시오. (가짜 이름이나 템플릿 변수명 사용 절대 금지)
 """
         optimized_prompt = self.headroom.optimize_text(raw_prompt)
         return optimized_prompt.strip()
@@ -989,8 +989,9 @@ class CompanyOrchestrator:
         title = slug.replace("-", " ").title()
         p_lower = prompt.lower() if prompt else slug.lower()
 
-        # 도메인별 미학 및 팔레트 판정 (교회/선교 vs SaaS vs 일반 커머스/포트폴리오)
+        # 도메인별 미학 및 팔레트 판정 (교회/선교 vs Apple/미니멀 vs SaaS vs 일반 커머스/포트폴리오)
         is_church = any(k in p_lower for k in ["교회", "church", "선교", "예배", "목사", "성경", "grace", "faith", "life"])
+        is_apple = any(k in p_lower for k in ["apple", "애플", "iphone", "아이폰", "mac", "맥북", "쿠퍼티노", "steve", "jobs", "아이패드"])
         is_saas = any(k in p_lower for k in ["saas", "대시보드", "ai", "자동화", "analytics", "bot", "dashboard"])
 
         if is_church:
@@ -1004,6 +1005,17 @@ class CompanyOrchestrator:
             hero_tagline = "은혜와 진리가 충만한 공동체"
             hero_sub = "함께 예배하고, 사랑으로 섬기며, 세상의 빛과 소금이 되는 교회입니다."
             nav_items = [("교회소개", "#about"), ("예배안내", "#worship"), ("말씀/찬양", "#sermons"), ("선교/사역", "#ministry"), ("오시는길", "#location"), ("온라인헌금", "#offering")]
+        elif is_apple:
+            theme_name = "Apple Minimalist Luxury"
+            primary = "#0071E3" # Apple Blue
+            accent = "#2997FF"
+            bg = "#000000"      # Jet Black
+            text_color = "#F5F5F7" # Off White
+            font_heading = "Plus Jakarta Sans"
+            font_body = "Pretendard"
+            hero_tagline = f"{title} — 경이로움의 연속."
+            hero_sub = "타협 없는 완성도와 궁극의 미니멀리즘. 당신이 상상하던 그 이상의 경험을 선사합니다."
+            nav_items = [("개요", "#overview"), ("디자인", "#design"), ("성능", "#performance"), ("스펙", "#specs"), ("구입하기", "#buy")]
         elif is_saas:
             theme_name = "Minimal SaaS Precision"
             primary = "#2563EB"
