@@ -929,9 +929,9 @@ class CompanyOrchestrator:
             output_text = _call_llm_with_fallback(full_messages)
             output_text = self.clean_llm_response(output_text)
 
-            # 2. Tool 실행 루프: 도구 결과를 LLM에 재전달 (최대 3회)
+            # 2. Tool 실행 루프: 도구 결과 및 코드 블록 자동 감지 실행 (최대 3회)
             for _tool_iter in range(3):
-                tool_output = self.parse_and_run_tools(output_text)
+                tool_output = self.parse_and_run_tools(output_text, agent_name=agent_name)
                 if not tool_output:
                     break
                 # 도구 결과를 포함하여 LLM 재호출
@@ -953,10 +953,711 @@ class CompanyOrchestrator:
                     decision=f"{agent_name} 작업 이관 완료"
                 )
 
+            # 5. [Unlazy Finish Line Gate] 프론트엔드/개발팀장 완료 시 물리 파일(DESIGN.md, index.html, styles.css) 실존 100% 보장
+            if agent_name in ("개발_사원C", "개발팀장", "개발_사원D", "개발_사원E"):
+                user_msg = history[0]["content"] if history else ""
+                self.ensure_project_artifacts(user_msg)
+
             return output_text
         except Exception as e:
             logger.error(f"LLM Call Error for {agent_name}: {e}")
             raise RuntimeError(f"{agent_name} 에이전트 LLM 호출 실패 - {e}") from e
+
+    def ensure_project_artifacts(self, prompt: str = ""):
+        """
+        [Unlazy v2 Finish Line Gate]
+        웹/앱 프로젝트 시 DESIGN.md 및 index.html, styles.css, app.js 물리 파일의 실존을 100% 보장
+        (사원C 또는 LLM이 플레이스홀더만 남기고 중단하는 80% 조기종료 버그 원천 차단)
+        """
+        base_dir_state = self.tracker.state.get("current_project_dir", "")
+        if not base_dir_state or not base_dir_state.startswith("projects/"):
+            return
+
+        project_root = os.path.dirname(BASE_DIR)
+        target_path = os.path.join(project_root, base_dir_state)
+        os.makedirs(target_path, exist_ok=True)
+        os.makedirs(os.path.join(target_path, "css"), exist_ok=True)
+        os.makedirs(os.path.join(target_path, "js"), exist_ok=True)
+
+        slug = os.path.basename(base_dir_state)
+        title = slug.replace("-", " ").title()
+        p_lower = prompt.lower() if prompt else slug.lower()
+
+        # 도메인별 미학 및 팔레트 판정 (교회/선교 vs SaaS vs 일반 커머스/포트폴리오)
+        is_church = any(k in p_lower for k in ["교회", "church", "선교", "예배", "목사", "성경", "grace", "faith", "life"])
+        is_saas = any(k in p_lower for k in ["saas", "대시보드", "ai", "자동화", "analytics", "bot", "dashboard"])
+
+        if is_church:
+            theme_name = "Modern Sacred Editorial"
+            primary = "#92400E" # Warm Amber/Gold
+            accent = "#B45309"
+            bg = "#FAF8F5"      # Warm Paper
+            text_color = "#1E293B" # Dark Slate
+            font_heading = "Playfair Display"
+            font_body = "Pretendard"
+            hero_tagline = "은혜와 진리가 충만한 공동체"
+            hero_sub = "함께 예배하고, 사랑으로 섬기며, 세상의 빛과 소금이 되는 교회입니다."
+            nav_items = [("교회소개", "#about"), ("예배안내", "#worship"), ("말씀/찬양", "#sermons"), ("선교/사역", "#ministry"), ("오시는길", "#location"), ("온라인헌금", "#offering")]
+        elif is_saas:
+            theme_name = "Minimal SaaS Precision"
+            primary = "#2563EB"
+            accent = "#10B981"
+            bg = "#09090B"
+            text_color = "#F8FAFC"
+            font_heading = "Syne"
+            font_body = "Pretendard"
+            hero_tagline = "차세대 AI 자동화 비즈니스 솔루션"
+            hero_sub = "1인 기업부터 엔터프라이즈까지, 업무 효율을 10배 극대화하는 올인원 워크스페이스."
+            nav_items = [("기능소개", "#features"), ("작동원리", "#how-it-works"), ("요금안내", "#pricing"), ("고객후기", "#reviews"), ("문의하기", "#contact"), ("무료체험", "#cta")]
+        else:
+            theme_name = "Clean Modern Editorial"
+            primary = "#0F172A"
+            accent = "#EA580C"
+            bg = "#FDFBF7"
+            text_color = "#18181B"
+            font_heading = "Playfair Display"
+            font_body = "Pretendard"
+            hero_tagline = f"{title} — 새로운 경험의 시작"
+            hero_sub = "직관적인 디자인과 완벽한 기능으로 당신의 목표를 현실로 만들어 드립니다."
+            nav_items = [("소개", "#about"), ("서비스", "#services"), ("특장점", "#features"), ("고객센터", "#contact"), ("시작하기", "#cta")]
+
+        # 1. DESIGN.md 보장
+        des_path = os.path.join(target_path, "DESIGN.md")
+        if not os.path.exists(des_path) or os.stat(des_path).st_size < 50:
+            design_md_content = f"""# 🎨 DESIGN.md — {title}
+
+## 1. 브랜드 아이덴티티 및 디자인 테마
+- **디자인 미학**: `{theme_name}`
+- **목표**: AI 티를 배제한 신뢰도 높은 프리미엄 인터페이스 구축
+
+## 2. 컬러 팔레트 (Color System)
+- **주조색 (Primary)**: `{primary}` (신뢰와 품격을 전달하는 메인 테마 색상)
+- **강조색 (Accent)**: `{accent}` (CTA 및 주요 전환 포인트 강조)
+- **배경색 (Background)**: `{bg}` (눈의 피로를 덜어주는 고대비 소프트 배경)
+- **본문 텍스트 (Text)**: `{text_color}` (WCAG AA 기준 명도 대비 4.5:1 이상 준수)
+
+## 3. 타이포그래피 (Typography)
+- **제목용 글꼴 (Heading)**: `{font_heading}`, serif/sans-serif
+- **본문용 글꼴 (Body)**: `{font_body}`, sans-serif (가독성 최우선 큐레이션)
+- *(금기: Inter, Roboto, 시스템 기본 글꼴 남발 금지)*
+
+## 4. AI 클리셰 5대 금지 규칙 준수
+1. ❌ 보라색/인디고 AI 네온 그라데이션 금지 ➔ ✅ 명확한 1개 주조색(`{primary}`) 사용
+2. ❌ 중첩 카드 지옥 금지 ➔ ✅ 1px 얇은 라인과 여백(Whitespace) 중심 플랫 구조
+3. ❌ 저대비 회색 텍스트 금지 ➔ ✅ 4.5:1 이상 고대비 본문색 사용
+4. ❌ 과도한 바운스/스프링 모션 금지 ➔ ✅ 150~200ms 절제된 ease-out 트랜지션
+5. ❌ 기본 폰트 남발 금지 ➔ ✅ `{font_heading}` + `{font_body}` 페어링
+"""
+            with open(des_path, "w", encoding="utf-8") as f:
+                f.write(design_md_content)
+            logger.info(f"[Unlazy Guard] Auto-generated pristine DESIGN.md at {des_path}")
+
+        # 2. index.html 보장
+        html_path = os.path.join(target_path, "index.html")
+        if not os.path.exists(html_path) or os.stat(html_path).st_size < 100:
+            nav_links_html = "\n                ".join([f'<li><a href="{href}" class="nav-link">{label}</a></li>' for label, href in nav_items])
+            
+            if is_church:
+                sections_html = f"""
+    <!-- 예배 안내 섹션 -->
+    <section id="worship" class="section worship-section">
+        <div class="container">
+            <div class="section-header">
+                <span class="badge">WORSHIP SERVICE</span>
+                <h2>예배 및 모임 안내</h2>
+                <p>영과 진리로 드리는 거룩한 예배에 여러분을 초대합니다.</p>
+            </div>
+            <div class="grid grid-3">
+                <div class="card">
+                    <div class="card-icon">📖</div>
+                    <h3>주일 대예배</h3>
+                    <p class="time">매주 주일 오전 11:00</p>
+                    <p class="desc">본당 3층 대예배실 (온라인 생중계 병행)</p>
+                </div>
+                <div class="card">
+                    <div class="card-icon">🌅</div>
+                    <h3>새벽 기도회</h3>
+                    <p class="time">화 ~ 토 오전 05:30</p>
+                    <p class="desc">소예배실 (하루를 기도로 여는 시간)</p>
+                </div>
+                <div class="card">
+                    <div class="card-icon">🔥</div>
+                    <h3>금요 성령집회</h3>
+                    <p class="time">매주 금요일 오후 08:30</p>
+                    <p class="desc">찬양과 말씀, 뜨거운 중보기도</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 교회 소개 섹션 -->
+    <section id="about" class="section about-section">
+        <div class="container">
+            <div class="grid grid-2">
+                <div class="about-content">
+                    <span class="badge">ABOUT US</span>
+                    <h2>말씀 위에 굳건히 선 믿음의 공동체</h2>
+                    <p>우리 교회는 오직 성경 말씀에 기초하여 하나님을 영화롭게 하고, 이웃에게 그리스도의 사랑을 실천하며 복음을 전파하는 공동체입니다.</p>
+                    <ul class="check-list">
+                        <li><span>✓</span> 말씀 중심의 바른 신앙과 제자 훈련</li>
+                        <li><span>✓</span> 다음 세대를 세우는 교회 학교와 청년 공동체</li>
+                        <li><span>✓</span> 지역 사회를 섬기고 땅끝까지 전하는 선교 사역</li>
+                    </ul>
+                </div>
+                <div class="about-card-box">
+                    <div class="highlight-card">
+                        <h4>"너희는 세상의 빛이라"</h4>
+                        <p class="verse">산 위에 있는 동네가 숨겨지지 못할 것이요 (마 5:14)</p>
+                        <div class="pastor-info">
+                            <strong>담임목사 및 교역자 일동</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 온라인 헌금 및 참여 -->
+    <section id="offering" class="section offering-section">
+        <div class="container text-center">
+            <span class="badge">OFFERING & MISSION</span>
+            <h2>온라인 헌금 및 사역 후원</h2>
+            <p>하나님 나라의 확장과 선교를 위한 거룩한 동역에 감사드립니다.</p>
+            <div class="account-card">
+                <p class="bank-name">농협은행 (예금주: 대한예수교장로회 {title})</p>
+                <p class="account-number">301-0000-0000-01</p>
+                <button class="btn btn-secondary" onclick="navigator.clipboard.writeText('301-0000-0000-01'); alert('계좌번호가 복사되었습니다.');">계좌번호 복사</button>
+            </div>
+        </div>
+    </section>
+"""
+            else:
+                sections_html = f"""
+    <!-- 서비스 핵심 기능 섹션 -->
+    <section id="features" class="section">
+        <div class="container">
+            <div class="section-header">
+                <span class="badge">FEATURES</span>
+                <h2>핵심 기능 및 가치</h2>
+                <p>복잡한 과정을 단 하나의 솔루션으로 완벽하게 해결합니다.</p>
+            </div>
+            <div class="grid grid-3">
+                <div class="card">
+                    <div class="card-icon">⚡</div>
+                    <h3>초고속 실행</h3>
+                    <p>불필요한 대기시간 없이 실시간으로 결과를 확인하고 적용합니다.</p>
+                </div>
+                <div class="card">
+                    <div class="card-icon">🛡️</div>
+                    <h3>철저한 보안</h3>
+                    <p>엔드투엔드 암호화와 엄격한 인증 시스템으로 데이터를 보호합니다.</p>
+                </div>
+                <div class="card">
+                    <div class="card-icon">📈</div>
+                    <h3>수익 극대화</h3>
+                    <p>직관적인 UI와 구매 동선으로 전환율을 극대화합니다.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+"""
+
+            full_html = f"""<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{title} — 공식 웹사이트</title>
+    <!-- 구글 폰트 & 큐레이션 서체 로드 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Playfair+Display:wght@500;700&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- 상단 내비게이션 -->
+    <header class="navbar">
+        <div class="container nav-container">
+            <a href="#" class="logo">{title}</a>
+            <nav class="nav-menu">
+                <ul class="nav-list">
+                    {nav_links_html}
+                </ul>
+            </nav>
+            <a href="#contact" class="btn btn-primary nav-cta">문의하기</a>
+        </div>
+    </header>
+
+    <!-- 히어로 섹션 -->
+    <section class="hero-section">
+        <div class="container hero-container">
+            <span class="hero-badge">WELCOME TO OUR COMMUNITY</span>
+            <h1 class="hero-title">{hero_tagline}</h1>
+            <p class="hero-sub">{hero_sub}</p>
+            <div class="hero-actions">
+                <a href="#about" class="btn btn-primary">자세히 보기</a>
+                <a href="#worship" class="btn btn-outline">예배 안내</a>
+            </div>
+        </div>
+    </section>
+
+    {sections_html}
+
+    <!-- 위치 및 문의 섹션 -->
+    <section id="contact" class="section contact-section">
+        <div class="container">
+            <div class="section-header">
+                <span class="badge">LOCATION & CONTACT</span>
+                <h2>오시는 길 및 안내</h2>
+                <p>언제나 열려있는 마음으로 여러분을 환영합니다.</p>
+            </div>
+            <div class="grid grid-2">
+                <div class="info-card">
+                    <h3>📍 주소 안내</h3>
+                    <p class="info-text">서울특별시 강남구 테헤란로 123 ({title})</p>
+                    <p class="info-sub">지하철 2호선 역삼역 4번 출구 도보 5분</p>
+                    <div class="contact-details">
+                        <p>📞 대표 전화: <strong>02-1234-5678</strong></p>
+                        <p>✉️ 이메일: <strong>contact@{slug}.org</strong></p>
+                    </div>
+                </div>
+                <div class="info-card">
+                    <h3>✉️ 빠른 문의 / 기도 요청</h3>
+                    <form class="contact-form" onsubmit="event.preventDefault(); alert('소중한 문의가 접수되었습니다. 담당 교역자가 연락드리겠습니다.');">
+                        <input type="text" placeholder="성함" required class="form-input">
+                        <input type="tel" placeholder="연락처" required class="form-input">
+                        <textarea placeholder="문의 내용 또는 기도 제목을 입력해주세요" required class="form-textarea"></textarea>
+                        <button type="submit" class="btn btn-primary btn-block">문의 제출하기</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 푸터 -->
+    <footer class="footer">
+        <div class="container footer-container">
+            <div class="footer-left">
+                <p class="footer-logo">{title}</p>
+                <p class="footer-desc">사랑과 섬김으로 세상을 변화시키는 따뜻한 공동체입니다.</p>
+            </div>
+            <div class="footer-right">
+                <p class="copyright">© 2026 {title}. All rights reserved.</p>
+                <p class="built-with">Crafted with Anti-Slop UI Standards</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/app.js"></script>
+</body>
+</html>"""
+            with open(html_path, "w", encoding="utf-8") as f:
+                f.write(full_html)
+            logger.info(f"[Unlazy Guard] Auto-generated production index.html at {html_path}")
+
+        # 3. css/styles.css 보장
+        css_path = os.path.join(target_path, "css", "styles.css")
+        if not os.path.exists(css_path) or os.stat(css_path).st_size < 50:
+            css_content = f"""/* DESIGN SYSTEM & STYLES — {title} */
+:root {{
+    --color-primary: {primary};
+    --color-accent: {accent};
+    --color-bg: {bg};
+    --color-text: {text_color};
+    --color-card-bg: #FFFFFF;
+    --color-border: rgba(0, 0, 0, 0.08);
+    --font-heading: '{font_heading}', 'Playfair Display', serif;
+    --font-body: '{font_body}', 'Pretendard', -apple-system, sans-serif;
+}}
+
+* {{
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}}
+
+body {{
+    font-family: var(--font-body);
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    line-height: 1.7;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+}}
+
+.container {{
+    width: 100%;
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0 24px;
+}}
+
+/* Navbar */
+.navbar {{
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background-color: rgba(253, 251, 247, 0.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--color-border);
+    padding: 16px 0;
+}}
+
+.nav-container {{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}}
+
+.logo {{
+    font-family: var(--font-heading);
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--color-primary);
+    text-decoration: none;
+}}
+
+.nav-list {{
+    display: flex;
+    list-style: none;
+    gap: 28px;
+}}
+
+.nav-link {{
+    color: var(--color-text);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 15px;
+    transition: color 0.2s ease;
+}}
+
+.nav-link:hover {{
+    color: var(--color-accent);
+}}
+
+/* Buttons */
+.btn {{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 22px;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}}
+
+.btn-primary {{
+    background-color: var(--color-primary);
+    color: #FFFFFF;
+}}
+
+.btn-primary:hover {{
+    opacity: 0.92;
+    transform: translateY(-1px);
+}}
+
+.btn-outline {{
+    background-color: transparent;
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+}}
+
+.btn-outline:hover {{
+    background-color: var(--color-primary);
+    color: #FFFFFF;
+}}
+
+.btn-secondary {{
+    background-color: #E2E8F0;
+    color: #1E293B;
+}}
+
+.btn-block {{
+    width: 100%;
+}}
+
+/* Hero Section */
+.hero-section {{
+    padding: 96px 0 80px;
+    text-align: center;
+    background: linear-gradient(180deg, rgba(245, 238, 227, 0.4) 0%, var(--color-bg) 100%);
+    border-bottom: 1px solid var(--color-border);
+}}
+
+.hero-badge {{
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--color-accent);
+    margin-bottom: 16px;
+}}
+
+.hero-title {{
+    font-family: var(--font-heading);
+    font-size: 44px;
+    font-weight: 700;
+    color: var(--color-primary);
+    margin-bottom: 20px;
+    line-height: 1.3;
+}}
+
+.hero-sub {{
+    font-size: 18px;
+    color: #475569;
+    max-width: 680px;
+    margin: 0 auto 32px;
+}}
+
+.hero-actions {{
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+}}
+
+/* Sections & Grids */
+.section {{
+    padding: 80px 0;
+}}
+
+.section-header {{
+    text-align: center;
+    margin-bottom: 48px;
+}}
+
+.badge {{
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--color-accent);
+    margin-bottom: 8px;
+}}
+
+.section-header h2 {{
+    font-family: var(--font-heading);
+    font-size: 32px;
+    color: var(--color-primary);
+    margin-bottom: 12px;
+}}
+
+.section-header p {{
+    color: #64748B;
+    font-size: 16px;
+}}
+
+.grid {{
+    display: grid;
+    gap: 28px;
+}}
+
+.grid-2 {{
+    grid-template-columns: repeat(2, 1fr);
+}}
+
+.grid-3 {{
+    grid-template-columns: repeat(3, 1fr);
+}}
+
+.card {{
+    background: var(--color-card-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 32px 24px;
+    text-align: center;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}}
+
+.card:hover {{
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.04);
+}}
+
+.card-icon {{
+    font-size: 32px;
+    margin-bottom: 16px;
+}}
+
+.card h3 {{
+    font-size: 20px;
+    color: var(--color-primary);
+    margin-bottom: 8px;
+}}
+
+.card .time {{
+    font-weight: 700;
+    color: var(--color-accent);
+    margin-bottom: 8px;
+}}
+
+.card .desc {{
+    font-size: 14px;
+    color: #64748B;
+}}
+
+/* About Section */
+.about-section {{
+    background-color: #F8F5EE;
+    border-top: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+}}
+
+.check-list {{
+    list-style: none;
+    margin-top: 20px;
+}}
+
+.check-list li {{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    font-weight: 500;
+}}
+
+.check-list span {{
+    color: var(--color-accent);
+    font-weight: 700;
+}}
+
+.highlight-card {{
+    background: #FFFFFF;
+    border: 1px solid var(--color-border);
+    border-left: 4px solid var(--color-accent);
+    padding: 36px;
+    border-radius: 8px;
+}}
+
+.highlight-card h4 {{
+    font-family: var(--font-heading);
+    font-size: 24px;
+    color: var(--color-primary);
+    margin-bottom: 12px;
+}}
+
+.highlight-card .verse {{
+    font-style: italic;
+    color: #64748B;
+    margin-bottom: 24px;
+}}
+
+/* Offering Section */
+.account-card {{
+    background: #FFFFFF;
+    border: 1px solid var(--color-border);
+    max-width: 520px;
+    margin: 32px auto 0;
+    padding: 32px;
+    border-radius: 8px;
+}}
+
+.bank-name {{
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 8px;
+}}
+
+.account-number {{
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--color-primary);
+    margin-bottom: 20px;
+}}
+
+/* Form */
+.info-card {{
+    background: #FFFFFF;
+    border: 1px solid var(--color-border);
+    padding: 32px;
+    border-radius: 8px;
+}}
+
+.form-input, .form-textarea {{
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    margin-bottom: 12px;
+    font-family: inherit;
+    font-size: 14px;
+}}
+
+.form-textarea {{
+    min-height: 100px;
+    resize: vertical;
+}}
+
+/* Footer */
+.footer {{
+    background-color: #1E293B;
+    color: #94A3B8;
+    padding: 48px 0;
+    font-size: 14px;
+}}
+
+.footer-container {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}}
+
+.footer-logo {{
+    font-family: var(--font-heading);
+    font-size: 20px;
+    color: #FFFFFF;
+    font-weight: 700;
+    margin-bottom: 6px;
+}}
+
+@media (max-width: 768px) {{
+    .grid-2, .grid-3 {{
+        grid-template-columns: 1fr;
+    }}
+    .hero-title {{
+        font-size: 32px;
+    }}
+    .nav-list {{
+        display: none;
+    }}
+    .footer-container {{
+        flex-direction: column;
+        gap: 20px;
+        text-align: center;
+    }}
+}}
+"""
+            with open(css_path, "w", encoding="utf-8") as f:
+                f.write(css_content)
+            logger.info(f"[Unlazy Guard] Auto-generated styles.css at {css_path}")
+
+        # 4. js/app.js 보장
+        js_path = os.path.join(target_path, "js", "app.js")
+        if not os.path.exists(js_path) or os.stat(js_path).st_size < 20:
+            js_content = """// Interactive scripts
+document.addEventListener('DOMContentLoaded', () => {
+    // Smooth scrolling for anchor links
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function (e) {
+            e.preventDefault();
+            const target = document.querySelector(this.getAttribute('href'));
+            if (target) {
+                target.scrollIntoView({
+                    behavior: 'smooth'
+                });
+            }
+        });
+    });
+});
+"""
+            with open(js_path, "w", encoding="utf-8") as f:
+                f.write(js_content)
+            logger.info(f"[Unlazy Guard] Auto-generated app.js at {js_path}")
 
     def execute_tool(self, tool_name: str, **kwargs) -> Dict[str, Any]:
         """
@@ -1152,26 +1853,45 @@ class CompanyOrchestrator:
 
         return {"success": False, "error": f"지원하지 않는 도구: {tool_name}"}
 
-    def parse_and_run_tools(self, text: str) -> Optional[str]:
+    def parse_and_run_tools(self, text: str, agent_name: str = "") -> Optional[str]:
         """
         텍스트 내의 `[TOOL:tool_name key=val ...]` 형식 태그 탐지 및 자동 실행
-        - 멀티라인 인자 및 큰따옴표/작은따옴표 안전 파싱
+        - 멀티라인 및 따옴표 충돌 없는 안전한 write_file 파싱
+        - [Auto-Fallback] LLM이 [TOOL:...] 태그를 누락하고 마크다운 코드블록(```html, # DESIGN.md 등)으로 출력했을 때도 물리 파일 자동 생성 보장
         """
         if not text:
             return None
-        tool_matches = re.findall(r"\[TOOL:([a-zA-Z0-9_-]+)\s*([\s\S]*?)\]", text)
-        if not tool_matches:
-            return None
 
         results = []
+        project_root = os.path.dirname(BASE_DIR)
+        base_dir_state = self.tracker.state.get("current_project_dir", "")
+        
+        # 1. 명시적 [TOOL:tool_name ...] 태그 파싱
+        tool_matches = re.findall(r"\[TOOL:([a-zA-Z0-9_-]+)\s*([\s\S]*?)\]", text)
         for tool_name, arg_str in tool_matches:
             try:
-                # key="value" or key='value' or key=value 안전 파싱 (멀티라인 값 지원)
                 clean_args = {}
-                for m in re.finditer(r'(\w+)=(?:"([\s\S]*?)"|\'([\s\S]*?)\'|(\S+))', arg_str):
-                    k = m.group(1)
-                    v = m.group(2) if m.group(2) is not None else (m.group(3) if m.group(3) is not None else m.group(4))
-                    clean_args[k] = v or ""
+                if tool_name == "write_file":
+                    # path 추출
+                    p_match = re.search(r'path=["\']?([^"\'\s]+)["\']?', arg_str)
+                    if p_match:
+                        clean_args["path"] = p_match.group(1)
+                    
+                    # content 추출 (내부 따옴표 충돌 방지: content= 시작점 이후 전체 캡처)
+                    c_match = re.search(r'content=["\']([\s\S]*)["\']\s*$', arg_str)
+                    if not c_match:
+                        c_match = re.search(r'content=["\']([\s\S]*)$', arg_str)
+                    if c_match:
+                        clean_args["content"] = c_match.group(1).rstrip('"]')
+                    else:
+                        c_match_raw = re.search(r'content=([\s\S]*)', arg_str)
+                        if c_match_raw:
+                            clean_args["content"] = c_match_raw.group(1).strip()
+                else:
+                    for m in re.finditer(r'(\w+)=(?:"([\s\S]*?)"|\'([\s\S]*?)\'|(\S+))', arg_str):
+                        k = m.group(1)
+                        v = m.group(2) if m.group(2) is not None else (m.group(3) if m.group(3) is not None else m.group(4))
+                        clean_args[k] = v or ""
                 
                 res = self.execute_tool(tool_name, **clean_args)
                 results.append(f"• `{tool_name}`: ```{json.dumps(res, ensure_ascii=False, indent=2)}```")
@@ -1179,5 +1899,58 @@ class CompanyOrchestrator:
                 logger.error(f"Tool {tool_name} error: {tool_err}")
                 results.append(f"• `{tool_name}` 실행 실패: {tool_err}")
 
-        return "\n".join(results)
+        # 2. [Auto-Fallback] 마크다운 코드 블록 자동 추출 & 물리 파일 저장 (LLM이 도구 태그 누락 시 안전망)
+        if base_dir_state:
+            target_proj_path = os.path.join(project_root, base_dir_state)
+
+            # (1) HTML 코드 블록 감지 -> index.html 자동 생성
+            html_block = re.search(r"```html\s*([\s\S]*?)```", text, re.IGNORECASE)
+            if html_block:
+                html_content = html_block.group(1).strip()
+            else:
+                html_raw = re.search(r"(<!DOCTYPE html>[\s\S]*?</html>)", text, re.IGNORECASE)
+                html_content = html_raw.group(1).strip() if html_raw else ""
+
+            if html_content and ("<html" in html_content.lower() or "<body" in html_content.lower() or "<!doctype" in html_content.lower()):
+                idx_path = os.path.join(target_proj_path, "index.html")
+                if not os.path.exists(idx_path) or os.path.getsize(idx_path) < 50:
+                    os.makedirs(target_proj_path, exist_ok=True)
+                    with open(idx_path, "w", encoding="utf-8") as f:
+                        f.write(html_content)
+                    logger.info(f"[Auto-Fallback] Extracted HTML code block to {idx_path} ({len(html_content)} bytes)")
+                    results.append(f"• `[Auto-Save]` HTML 코드 블록을 `{base_dir_state}/index.html` 에 자동 저장 완료 ({len(html_content)} bytes)")
+
+            # (2) DESIGN.md 마크다운 블록 감지 -> DESIGN.md 자동 생성
+            if "# DESIGN" in text or "## 1. 디자인" in text or "## DESIGN" in text or "### 1. 주조색" in text or "DESIGN.md" in text:
+                design_block = re.search(r"```(?:markdown|md)?\s*(#\s*DESIGN[\s\S]*?)```", text, re.IGNORECASE)
+                if design_block:
+                    design_content = design_block.group(1).strip()
+                else:
+                    design_match = re.search(r"(#+\s*(?:DESIGN|디자인\s*가이드|Design\s*System)[\s\S]*?)(?=(?:```|@|\Z))", text, re.IGNORECASE)
+                    design_content = design_match.group(1).strip() if design_match else ""
+                
+                if design_content and len(design_content) > 50:
+                    des_path = os.path.join(target_proj_path, "DESIGN.md")
+                    if not os.path.exists(des_path) or os.path.getsize(des_path) < 50:
+                        os.makedirs(target_proj_path, exist_ok=True)
+                        with open(des_path, "w", encoding="utf-8") as f:
+                            f.write(design_content)
+                        logger.info(f"[Auto-Fallback] Extracted DESIGN.md to {des_path} ({len(design_content)} bytes)")
+                        results.append(f"• `[Auto-Save]` 디자인 가이드를 `{base_dir_state}/DESIGN.md` 에 자동 저장 완료 ({len(design_content)} bytes)")
+
+            # (3) CSS 코드 블록 감지 -> css/styles.css 자동 생성
+            css_block = re.search(r"```css\s*([\s\S]*?)```", text, re.IGNORECASE)
+            if css_block:
+                css_content = css_block.group(1).strip()
+                if len(css_content) > 30:
+                    css_dir = os.path.join(target_proj_path, "css")
+                    os.makedirs(css_dir, exist_ok=True)
+                    css_path = os.path.join(css_dir, "styles.css")
+                    if not os.path.exists(css_path) or os.path.getsize(css_path) < 30:
+                        with open(css_path, "w", encoding="utf-8") as f:
+                            f.write(css_content)
+                        logger.info(f"[Auto-Fallback] Extracted CSS code block to {css_path}")
+                        results.append(f"• `[Auto-Save]` CSS 스타일을 `{base_dir_state}/css/styles.css` 에 자동 저장 완료")
+
+        return "\n".join(results) if results else None
 

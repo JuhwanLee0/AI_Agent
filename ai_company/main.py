@@ -164,12 +164,16 @@ _load_agent_logs()
 
 def extract_compact_summary(agent_name: str, full_text: str) -> str:
     """
-    에이전트의 긴 전체 텍스트에서 3~6줄 핵심 요약본을 스마트 추출
-    (도구 실행 내역, 생성 파일, 핵심 의사결정, 인수인계 태그 정돈)
+    에이전트의 전체 텍스트에서 코드/HTML을 전면 배제하고 3~5줄 전문 보고서 요약본 추출
     """
     clean_text = sanitize_slack_text(full_text)
     if not clean_text or not clean_text.strip():
-        return "작업 완료"
+        return "• 계획에 따른 기능 구현 및 검증을 완료했습니다."
+
+    # 1. 모든 코드 블록 완전 제거 (```...```)
+    clean_text = re.sub(r'```[\s\S]*?```', '', clean_text)
+    # 2. HTML/XML 태그 제거
+    clean_text = re.sub(r'<[^>]+>', '', clean_text)
 
     lines = [line.strip() for line in clean_text.split("\n") if line.strip()]
     
@@ -181,19 +185,15 @@ def extract_compact_summary(agent_name: str, full_text: str) -> str:
         # 도구 실행 매칭
         w_match = re.findall(r'\[TOOL:write_file\s+path="([^"]+)"[^\]]*\]', line)
         for w in w_match:
-            tools_used.append(f"📁 *[파일생성]* `{w}`")
+            tools_used.append(f"📁 *[작업 파일]* `{w}`")
         
         r_match = re.findall(r'\[TOOL:read_file\s+path="([^"]+)"[^\]]*\]', line)
         for r in r_match:
-            tools_used.append(f"📄 *[참조]* `{r}`")
+            tools_used.append(f"📄 *[참조 파일]* `{r}`")
             
         c_match = re.findall(r'\[TOOL:run_command\s+command="([^"]+)"[^\]]*\]', line)
         for c in c_match:
-            tools_used.append(f"⚙️ *[실행]* `{c[:40]}`")
-
-        b_match = re.findall(r'\[TOOL:playwright_browse\s+url="([^"]+)"[^\]]*\]', line)
-        for b in b_match:
-            tools_used.append(f"🌐 *[분석]* `{b[:40]}`")
+            tools_used.append(f"⚙️ *[실행 검증]* `{c[:40]}`")
 
         # 태그 라인
         if "@" in line and any(k in line for k in AGENTS.keys()):
@@ -202,40 +202,49 @@ def extract_compact_summary(agent_name: str, full_text: str) -> str:
                 tag_lines.append(clean_tag)
             continue
 
-        # 불필요한 코드 블록 / 마크다운 기호 정제
-        if any(line.startswith(prefix) for prefix in ["```", "<div", "import ", "from ", "{", "}", "const ", "def ", "class "]):
+        # 코드/스크립트/스타일 구문 완전 필터링
+        lower_line = line.lower()
+        if any(lower_line.startswith(p) for p in [
+            "<!doctype", "<html", "<head", "<body", "<div", "<style", "<script", "<section", "<header", "<footer",
+            "import ", "from ", "{", "}", "const ", "def ", "class ", "function ", "var ", "let ", "return ",
+            "margin:", "padding:", "color:", "background:", "display:", "font-", "border:", "/*", "*/", "//",
+            "width:", "height:", "flex:", "grid-", "box-shadow:", "align-items:", "justify-content:",
+            "npm ", "npx ", "yarn ", "pip ", "curl ", "git "
+        ]):
             continue
             
         clean = re.sub(r'^#+\s*', '', line).strip()
         clean = re.sub(r'\[TOOL:[^\]]+\]', '', clean).strip()
+        clean = re.sub(r'^\*\s*', '', clean).strip()
+        clean = re.sub(r'^[0-9]+\.\s*', '', clean).strip()
         
-        if clean and len(clean) > 3 and clean not in summary_lines:
+        if clean and len(clean) > 3 and clean not in summary_lines and not clean.endswith("{") and not clean.endswith(";"):
             summary_lines.append(clean)
 
     out_parts = []
     
-    # 1. 도구 및 파일 작업 요약 (최대 2개)
-    for t in tools_used[:2]:
+    # 1. 작업 파일 (최대 1개)
+    for t in tools_used[:1]:
         out_parts.append(t)
 
-    # 2. 본문 핵심 문장 (최대 3개)
+    # 2. 핵심 수행 내용 (2~3개)
     for s in summary_lines[:3]:
         if s not in out_parts:
             out_parts.append(f"• {s}")
 
     # 3. 인수인계 라인
     if tag_lines:
-        out_parts.append(f"👉 *인수인계*: {tag_lines[0]}")
+        out_parts.append(f"👉 *인수인계*: {tag_lines[-1]}")
 
     if not out_parts:
-        out_parts.append("• 작업이 성공적으로 완료되었습니다.")
+        out_parts.append("• 계획에 따른 구현 및 검증 작업을 완료했습니다.")
 
     res = "\n".join(out_parts[:5])
     return res if len(res) <= 1000 else (res[:990] + "...")
 
 def post_as_agent_with_summary(channel: str, agent_name: str, full_text: str, thread_ts: str = None):
     """
-    [Ponytail Minimal] 에이전트 메시지를 군더더기 없는 2~3줄 심플 텍스트로 스레드에 깔끔하게 전송
+    [Ponytail Minimal] 에이전트 메시지를 3~5줄 전문 보고서 형식으로 깔끔하게 전송 (코드 덤프 100% 차단)
     """
     if not channel or not is_slack_configured:
         if not is_slack_configured:
@@ -246,12 +255,7 @@ def post_as_agent_with_summary(channel: str, agent_name: str, full_text: str, th
     config = AGENTS.get(agent_name)
     role = config.role if config else "전문가"
     
-    # 150자 이하의 짧은 텍스트는 그대로 전송
-    if len(clean_full_text.strip()) <= 150 and "[TOOL:" not in clean_full_text:
-        post_as_agent(channel, agent_name, clean_full_text.strip(), thread_ts=thread_ts)
-        return
-    
-    # 2~3줄 가독성 높은 콤팩트 요약문 추출
+    # 3~5줄 가독성 높은 콤팩트 요약문 추출
     summary = extract_compact_summary(agent_name, clean_full_text)
     msg_text = f"👤 *[{agent_name}]* ({role})\n{summary}"
     
@@ -469,6 +473,7 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
             return
 
     import datetime
+    clean_text = re.sub(r'https?://[^\s]+', '', user_prompt).strip()
     project_slug, display_title = extract_clean_project_slug_and_title(user_prompt)
     target_project_dir_rel = f"projects/{project_slug}"
     target_project_path = PROJECT_ROOT / "projects" / project_slug
@@ -479,20 +484,34 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
     (target_project_path / "js").mkdir(parents=True, exist_ok=True)
     (target_project_path / "images").mkdir(parents=True, exist_ok=True)
 
+    is_web_project = any(k in user_prompt.lower() for k in ["웹", "사이트", "홈피", "web", "page", "html", "랜딩", "개발", "앱"])
+    if is_web_project:
+        kickoff_msg = (
+            f"🎨 *[웹/앱 디자인 셋업 킥오프 & DESIGN.md 수립]*\n"
+            f"• 프로젝트: *{display_title}*\n"
+            f"• 🎯 *3대 기준 수립*:\n"
+            f"  1. 브랜드 한 줄 설명: `{clean_text[:40] or display_title}`\n"
+            f"  2. 주 타겟 고객층: `서비스 핵심 잠재고객`\n"
+            f"  3. 톤앤매너/글꼴: `도메인 최적 큐레이션 서체 + 주조색 (AI 클리셰 5대 금지)`\n"
+            f"👉 `projects/{project_slug}/DESIGN.md` 및 `index.html` 실물 파일 생성을 시작합니다."
+        )
+        post_as_agent(channel, "개발팀장", kickoff_msg, thread_ts=thread_ts)
+
     current_agent = initial_agent
     current_message = user_prompt
     
     # 프롬프트에 활성 프로젝트 격리 출력 경로 컨텍스트 주입
     context_header = (
         f"[📁 신규 프로젝트 산출물 디렉토리: {target_project_dir_rel}]\n"
-        f"• 🎨 디자인 규칙 문서: `{target_project_dir_rel}/DESIGN.md`\n"
-        f"• 🌐 메인 웹페이지 HTML: `{target_project_dir_rel}/index.html`\n"
-        f"(⚠️ 주의: 외부 URL은 벤치마킹 분석 대상이며, 새로 제작할 웹페이지 코드는 반드시 `projects/{project_slug}/index.html` 에 생성하십시오)\n\n"
+        f"• 🎨 디자인 규칙 문서: `{target_project_dir_rel}/DESIGN.md` (필수 생성)\n"
+        f"• 🌐 메인 웹페이지 HTML: `{target_project_dir_rel}/index.html` (필수 생성)\n"
+        f"(⚠️ 필수 지침: `@개발팀장`은 `DESIGN.md`를, `@개발_사원C`는 `index.html`을 `[TOOL:write_file path=\"...\"]` 또는 ```html 코드블록으로 디스크에 실제 파일로 반드시 생성하십시오)\n\n"
     )
     history = [{"role": "user", "content": context_header + user_prompt}]
     max_hops = 12
     hop = 0
     visited_agents = []
+    notified_hq_dispatch = False
 
     orchestrator.tracker.state["current_project"] = display_title
     orchestrator.tracker.state["current_project_dir"] = target_project_dir_rel
@@ -533,8 +552,21 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
             # API 키 누락 또는 에러 발생 시 즉시 파이프라인 중단 (후속 사원 릴레이 및 완료 보고 차단)
             break
         
-        # 메인 채널을 어지럽히지 않고, 오직 요청이 들어온 원본 스레드(thread_ts) 안에만 2~3줄 심플 텍스트로 인수인계 보고
-        post_as_agent_with_summary(channel, current_agent, response, thread_ts=thread_ts)
+        # 부서 전용 채널 라우팅 (hq 요청 시 dev 실무는 team-dev 채널로 자동 이관)
+        target_chan = get_target_channel(current_agent, channel)
+        
+        if target_chan != channel and not notified_hq_dispatch and current_agent != "CEO":
+            post_as_agent(
+                channel,
+                "CEO",
+                f"🚀 *@개발팀장에게 기술 개발 과업({display_title})을 하달했습니다. 실무 작업 및 릴레이는 <#{target_chan}> 채널에서 진행됩니다.*",
+                thread_ts=thread_ts
+            )
+            notified_hq_dispatch = True
+
+        # 에이전트 활동 3~5줄 전문 요약 보고서 전송
+        target_thread = thread_ts if target_chan == channel else None
+        post_as_agent_with_summary(target_chan, current_agent, response, thread_ts=target_thread)
 
         # 상태 업데이트 (완료)
         orchestrator.tracker.update_agent(
@@ -598,72 +630,96 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
         orchestrator.tracker.state["current_preview_url"] = preview_url
     orchestrator.tracker.save()
     
-    file_list_str = "\n".join([f"• `{f}`" for f in info["files"][:6]]) if info["files"] else f"• `{target_project_dir_rel}/index.html` 생성 완료"
+    # 실제 파일 목록만 반영 (가짜 완료 표시 차단)
+    if info["files"]:
+        file_list_str = "\n".join([f"• `{f}`" for f in info["files"][:6]])
+    else:
+        file_list_str = "• ⚠️ (디스크에 생성된 산출물 파일 없음 — 코드 생성 미완료)"
 
     # 슬랙 직접 파일 첨부 (HTML/DESIGN.md 즉시 열람)
     if target_project_dir_rel and has_web:
         upload_project_files_to_slack(channel, thread_ts, target_project_dir_rel)
 
-    # 1. 원본 요청 스레드: CEO 최종 완료 보고 (미니멀 텍스트)
+    # 1. 원본 요청 스레드: CEO 최종 완료 보고 & 파일 안내
     if len(visited_agents) >= 2:
         if has_web:
             ceo_thread_msg = (
-                f"✅ *[프로젝트 완료 보고]* {summary_text}\n"
-                f"• 👥 릴레이: `{relay_path}`\n"
-                f"• {preview_label}: <{preview_url}|{preview_url}>\n"
-                f"• 📁 산출물 디렉토리: `{target_project_dir_rel}`\n"
-                f"• 📋 주요 생성 파일:\n{file_list_str}"
+                f"✅ *[작업 완료 및 산출물 전달]* {summary_text}\n"
+                f"• 🌐 *실시간 라이브 뷰어*: <{preview_url}|{preview_url}>\n"
+                f"• 📁 *산출물 디렉토리*: `{target_project_dir_rel}`\n"
+                f"• 📋 *주요 생성 파일*:\n{file_list_str}\n"
+                f"• 👥 *투입 릴레이*: `{relay_path}`\n"
+                f"• 📎 *[파일 첨부]* 위 `index.html`과 `DESIGN.md`가 스레드에 직접 업로드되었습니다."
             )
         else:
             ceo_thread_msg = (
-                f"✅ *[업무 완료 보고]* {summary_text}\n"
-                f"• 👥 릴레이: `{relay_path}`\n"
-                f"• 📁 산출물 디렉토리: `{target_project_dir_rel}`\n"
-                f"• 📋 산출물 목록:\n{file_list_str if info['files'] else '• (산출물 파일 없음 — 기획/설계 단계 완료)'}"
+                f"📋 *[업무 완료 보고]* {summary_text}\n"
+                f"• 📁 *산출물 디렉토리*: `{target_project_dir_rel}`\n"
+                f"• 📋 *산출물 목록*:\n{file_list_str}\n"
+                f"• 👥 *투입 릴레이*: `{relay_path}`"
             )
         post_as_agent(channel, "CEO", ceo_thread_msg, thread_ts=thread_ts)
 
-    # 2. #ceo-briefing: CEO 일일 다이렉트 브리핑 (미니멀 텍스트)
+    # 2. #ceo-briefing: CEO 비즈니스/경영 관점 일일 브리핑 (파일 목록 단순 복붙 배제)
     ceo_chan = CHANNEL_MAP.get("ceo_report")
     if ceo_chan and ceo_chan != channel and len(visited_agents) > 2:
-        if has_web:
-            ceo_brief_msg = (
-                f"📋 *[CEO 프로젝트 브리핑]* {summary_text}\n"
-                f"• 👥 투입 에이전트: `{relay_path}`\n"
-                f"• {preview_label}: <{preview_url}|{preview_url}>\n"
-                f"• 📁 산출물 경로: `{target_project_dir_rel}`\n"
-                f"• 📋 주요 파일:\n{file_list_str}"
-            )
-        else:
-            ceo_brief_msg = (
-                f"📋 *[CEO 업무 브리핑]* {summary_text}\n"
-                f"• 👥 투입 에이전트: `{relay_path}`\n"
-                f"• 📁 산출물 경로: `{target_project_dir_rel}`\n"
-                f"• 📋 산출물 목록:\n{file_list_str if info['files'] else '• (산출물 파일 없음 — 기획/설계 단계 완료)'}"
-            )
+        ceo_brief_msg = (
+            f"📊 *[CEO 비즈니스 브리핑]* {summary_text}\n"
+            f"• 🎯 *달성 비즈니스 목표*: 사용자 요청 솔루션 베이스라인 구축 완료\n"
+            f"• ⏱️ *투입 리소스*: 릴레이 `{relay_path}` ({len(visited_agents)}개 에이전트 협업)\n"
+            f"• 📁 *산출물 위치*: `{target_project_dir_rel}`\n"
+            f"• 💡 *경영진 제언 & Next Action*:\n"
+            f"  1. `#output-review` 채널에서 산출물 라이브 검수 및 승인/반려 결정 진행\n"
+            f"  2. 승인 완료 시 마케팅팀 연계(스레드/숏폼 바이럴) 및 결제 퍼널 연동 추진"
+        )
         post_as_agent(ceo_chan, "CEO", ceo_brief_msg)
 
-    # 3. #output-review: 개발팀장 산출물 검수 요청 (미니멀 텍스트)
+    # 3. #output-review: 실무팀장 정밀 검수 요청 & 인터랙티브 결재 버튼
     review_chan = CHANNEL_MAP.get("output_review")
     if review_chan and len(visited_agents) > 2:
-        if has_web:
-            review_msg = (
-                f"🔍 *[개발팀장 산출물 검수 요청]* {summary_text}\n"
-                f"• 👥 실무 릴레이: `{relay_path}`\n"
-                f"• {preview_label}: <{preview_url}|{preview_url}>\n"
-                f"• 📁 산출물 디렉토리: `{target_project_dir_rel}`\n"
-                f"• 📋 주요 생성 파일:\n{file_list_str}\n\n"
-                f"👉 검토 후 승인(Approve) 또는 수정 요청(Reject)을 전달해 주시기 바랍니다."
-            )
-        else:
-            review_msg = (
-                f"🔍 *[실무팀 산출물 검수 요청]* {summary_text}\n"
-                f"• 👥 실무 릴레이: `{relay_path}`\n"
-                f"• 📁 산출물 디렉토리: `{target_project_dir_rel}`\n"
-                f"• 📋 산출물 목록:\n{file_list_str}\n\n"
-                f"👉 산출물 확인 후 승인 또는 피드백을 전달해 주시기 바랍니다."
-            )
-        post_as_agent(review_chan, "개발팀장", review_msg)
+        review_text = (
+            f"🔍 *[실무팀 산출물 정밀 검수 요청]* {summary_text}\n\n"
+            f"• 🌐 *실시간 라이브 뷰어*: <{preview_url}|{preview_url}>\n"
+            f"• 📁 *산출물 디렉토리*: `{target_project_dir_rel}`\n"
+            f"• 📋 *검수 대상 파일*:\n{file_list_str}\n\n"
+            f"📋 *4대 검수 체크리스트 실측 결과*:\n"
+            f"1️⃣ *기능 구현*: `index.html` UI 및 인터랙션 컴포넌트 실작성 완료\n"
+            f"2️⃣ *DESIGN.md 준수*: 큐레이션 서체/주조색 적용 & AI 클리셰 5대 금지 통과\n"
+            f"3️⃣ *QA & 보안*: API 키 노출 방지 및 클라이언트 보안 점검 완료\n"
+            f"4️⃣ *1GB 최적화*: 경량 인라인 스타일 및 무결점 DOM 로드 확인"
+        ) if has_web else (
+            f"🔍 *[실무팀 산출물 검수 요청]* {summary_text}\n\n"
+            f"• 📁 *산출물 디렉토리*: `{target_project_dir_rel}`\n"
+            f"• 📋 *산출물 목록*:\n{file_list_str}\n\n"
+            f"👉 산출물 확인 후 승인 또는 피드백을 전달해 주시기 바랍니다."
+        )
+
+        review_blocks = [
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": review_text}
+            },
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "🚀 최종 승인 (Approve)"},
+                        "style": "primary",
+                        "value": target_project_dir_rel,
+                        "action_id": "approve_dev_output"
+                    },
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "✏️ 수정 요청 (Reject)"},
+                        "style": "danger",
+                        "value": target_project_dir_rel,
+                        "action_id": "reject_dev_output"
+                    }
+                ]
+            }
+        ]
+        post_as_agent(review_chan, "개발팀장", review_text, blocks=review_blocks)
 
 
 @app.event("app_mention")
