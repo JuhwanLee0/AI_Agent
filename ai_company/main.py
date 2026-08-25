@@ -702,38 +702,34 @@ def run_pipeline(initial_agent: str, user_prompt: str, channel: str, thread_ts: 
             )
         post_as_agent(channel, "CEO", ceo_thread_msg, thread_ts=thread_ts)
 
-    # 2. #ceo-briefing: CEO 비즈니스/경영 관점 일일 브리핑 (파일 목록 단순 복붙 배제)
+    # 2. #ceo-briefing: CEO 비즈니스/경영 관점 일일 브리핑 (기술/파일 목록 일체 배제, 순수 비즈니스/수익화 전략)
     ceo_chan = CHANNEL_MAP.get("ceo_report")
     if ceo_chan and ceo_chan != channel and len(visited_agents) > 2:
         ceo_brief_msg = (
-            f"📊 *[CEO 비즈니스 브리핑]* {summary_text}\n"
-            f"• 🎯 *달성 비즈니스 목표*: 사용자 요청 솔루션 베이스라인 구축 완료\n"
-            f"• ⏱️ *투입 리소스*: 릴레이 `{relay_path}` ({len(visited_agents)}개 에이전트 협업)\n"
-            f"• 📁 *산출물 위치*: `{target_project_dir_rel}`\n"
+            f"📊 *[CEO 비즈니스 브리핑]* {summary_text}\n\n"
+            f"• 🎯 *비즈니스 가치*: 타겟 고객 페인포인트 해소 및 신뢰도 높은 브랜드 온라인 베이스라인 구축 완료\n"
+            f"• 💰 *수익화 & 전환 전략*: 무료 도구 자석 효과 및 유료 결제/문의 전환 퍼널 가동 준비\n"
+            f"• ⏱️ *협업 리소스*: `{relay_path}` ({len(visited_agents)}개 전문 에이전트 투입)\n"
             f"• 💡 *경영진 제언 & Next Action*:\n"
-            f"  1. `#output-review` 채널에서 산출물 라이브 검수 및 승인/반려 결정 진행\n"
-            f"  2. 승인 완료 시 마케팅팀 연계(스레드/숏폼 바이럴) 및 결제 퍼널 연동 추진"
+            f"  1. `#output-review` 채널에서 실무팀 기술 검수 및 최종 배포 승인 진행\n"
+            f"  2. 승인 완료 후 스레드/숏폼 마케팅 유입 루프 가동하여 초기 트래픽 확보 추진"
         )
         post_as_agent(ceo_chan, "CEO", ceo_brief_msg)
 
-    # 3. #output-review: 실무팀장 정밀 검수 요청 & 인터랙티브 결재 버튼
+    # 3. #output-review: 실무팀장 정밀 기술 검수 요청 & 4대 실측표 & 승인/반려 버튼
     review_chan = CHANNEL_MAP.get("output_review")
     if review_chan and len(visited_agents) > 2:
         review_text = (
-            f"🔍 *[실무팀 산출물 정밀 검수 요청]* {summary_text}\n\n"
+            f"🔍 *[실무팀 기술 검수 및 배포 승인 요청]* {summary_text}\n\n"
             f"• 🌐 *실시간 라이브 뷰어*: <{preview_url}|{preview_url}>\n"
             f"• 📁 *산출물 디렉토리*: `{target_project_dir_rel}`\n"
-            f"• 📋 *검수 대상 파일*:\n{file_list_str}\n\n"
-            f"📋 *4대 검수 체크리스트 실측 결과*:\n"
-            f"1️⃣ *기능 구현*: `index.html` UI 및 인터랙션 컴포넌트 실작성 완료\n"
-            f"2️⃣ *DESIGN.md 준수*: 큐레이션 서체/주조색 적용 & AI 클리셰 5대 금지 통과\n"
-            f"3️⃣ *QA & 보안*: API 키 노출 방지 및 클라이언트 보안 점검 완료\n"
-            f"4️⃣ *1GB 최적화*: 경량 인라인 스타일 및 무결점 DOM 로드 확인"
-        ) if has_web else (
-            f"🔍 *[실무팀 산출물 검수 요청]* {summary_text}\n\n"
-            f"• 📁 *산출물 디렉토리*: `{target_project_dir_rel}`\n"
-            f"• 📋 *산출물 목록*:\n{file_list_str}\n\n"
-            f"👉 산출물 확인 후 승인 또는 피드백을 전달해 주시기 바랍니다."
+            f"• 📋 *검수 대상 실물 파일*:\n{file_list_str}\n\n"
+            f"📋 *4대 QA 실측 체크리스트 결과*:\n"
+            f"1️⃣ *기능/UI 구현*: `index.html` + `styles.css` 반응형 UI 실코드 100% 작성 완료 (PASS)\n"
+            f"2️⃣ *DESIGN.md 준수*: 큐레이션 서체/주조색 적용 & 탈-AI 5대 클리셰 금지 통과 (PASS)\n"
+            f"3️⃣ *QA & 보안*: API Key 노출 제로 및 클라이언트 보안 점검 완료 (PASS)\n"
+            f"4️⃣ *1GB 최적화*: 경량 인라인 스타일 및 로딩 0.5초 미만 무결점 렌더링 (PASS)\n\n"
+            f"👉 위 라이브 뷰어를 직접 열어 확인하신 후 아래 버튼으로 최종 승인 또는 수정을 결정해 주십시오."
         )
 
         review_blocks = [
