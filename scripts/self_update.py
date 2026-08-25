@@ -18,19 +18,14 @@ def run_self_update():
     logger.info(f"Starting self-update in directory: {PROJECT_ROOT}")
     os.chdir(PROJECT_ROOT)
 
-    # 1. 런타임 파일 충돌 방지: git stash & pull
+    # 1. 깃 최신화 (안전한 fetch & reset --hard)
     try:
-        # 런타임에 변경될 수 있는 상태 파일들을 안전하게 임시 보관
-        subprocess.run(["git", "stash", "--include-untracked"], capture_output=True, text=True, timeout=15)
-        pull_res = subprocess.run(["git", "pull", "origin", "main"], capture_output=True, text=True, timeout=30)
-        logger.info(f"Git Pull Output: {pull_res.stdout.strip()}")
-        if pull_res.returncode != 0:
-            # 강제 리셋 후 최신 main으로 맞춤 시도 (최후의 안전망)
-            subprocess.run(["git", "fetch", "origin", "main"], capture_output=True, text=True, timeout=15)
-            reset_res = subprocess.run(["git", "reset", "--hard", "origin/main"], capture_output=True, text=True, timeout=15)
-            if reset_res.returncode != 0:
-                logger.error(f"Git Pull & Reset Failed: {pull_res.stderr}")
-                return False, f"Git Pull 실패: {pull_res.stderr.strip()}"
+        subprocess.run(["git", "fetch", "origin", "main"], capture_output=True, text=True, timeout=20)
+        reset_res = subprocess.run(["git", "reset", "--hard", "origin/main"], capture_output=True, text=True, timeout=20)
+        logger.info(f"Git Reset Output: {reset_res.stdout.strip()}")
+        if reset_res.returncode != 0:
+            logger.error(f"Git Reset Failed: {reset_res.stderr}")
+            return False, f"Git Reset 실패: {reset_res.stderr.strip()}"
     except Exception as e:
         logger.error(f"Git pull error: {e}")
         return False, str(e)
@@ -46,6 +41,7 @@ def run_self_update():
     restart_script = f"""
 sleep 2
 pkill -9 -f "ai_company.main" || true
+pkill -9 -f "python3 -u main.py" || true
 pkill -9 -f "main.py" || true
 cd "{PROJECT_ROOT}"
 nohup {py_exec} -u main.py > agent.log 2>&1 &

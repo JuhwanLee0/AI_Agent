@@ -996,7 +996,9 @@ def handle_update_command(ack, respond, command):
     def _do_update():
         from scripts.self_update import run_self_update
         success, msg = run_self_update()
-        if not success:
+        if success:
+            respond(f"✅ *[서버 업데이트 완료]* 최신 커밋 `{msg}` 코드로 무중단 재부팅 중입니다! (약 2~3초 후 가동)")
+        else:
             respond(f"❌ 업데이트 실패: {msg}")
 
     threading.Thread(target=_do_update, daemon=True).start()
